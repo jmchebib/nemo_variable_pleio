@@ -49,7 +49,6 @@ LCE_QuantiInit::LCE_QuantiInit ( ) : LifeCycleEvent("quanti_init","quant"), _doB
 // ----------------------------------------------------------------------------------------
 bool LCE_QuantiInit::setParameters ( )
 {
-  //cout << "\nStart of LCE_QuantiInit::setParameters()!!!!";
   TMatrix pat_mat;
   unsigned int patchNbr = _popPtr->getPatchNbr();
   TProtoQuanti* proto = dynamic_cast<TProtoQuanti*> ( _popPtr->getTraitPrototype("quant") );
@@ -91,7 +90,7 @@ bool LCE_QuantiInit::setParameters ( )
   if (!_doByAlleleFreq && !_doByTraitValue) {
     error("either \"quanti_init_trait_values\" or \"quanti_init_freq\" are missing for LCE quanti_init\n");
   }
-  //cout << "\nEnd of LCE_QuantiInit::setParameters()!!!!";
+  
   return (_doByTraitValue || _doByAlleleFreq);
 }
 // ----------------------------------------------------------------------------------------
@@ -99,7 +98,6 @@ bool LCE_QuantiInit::setParameters ( )
 // ----------------------------------------------------------------------------------------
 void LCE_QuantiInit::execute ( )
 {
-  //cout << "\nStart of LCE_QuantiInit::execute()!!!!";
   if(!(_popPtr->getCurrentGeneration() == 1)) return;
 
   unsigned int patchNbr = _popPtr->getPatchNbr();
@@ -147,7 +145,6 @@ void LCE_QuantiInit::execute ( )
 // ----------------------------------------------------------------------------------------
 void LCE_QuantiInit::init_trait_value(sex_t SEX, age_idx age, unsigned int size, unsigned int deme, double *values)
 { 
-//  cout << "\nStart of LCE_QuantiInit::init_trait_values()!!!!";
   Individual* ind;
   TTQuanti* trait;
 //  for(unsigned h = 0; h < _nTraits; h++)
@@ -159,7 +156,7 @@ void LCE_QuantiInit::init_trait_value(sex_t SEX, age_idx age, unsigned int size,
       trait->init_sequence();
       trait->set_value();
     }
-//    cout << "\nEnd of LCE_QuantiInit::init_trait_values()!!!!";
+  
 }
 // ----------------------------------------------------------------------------------------
 // LCE_QuantiInit::init_allele_freq
@@ -237,7 +234,7 @@ bool LCE_NtrlInit::setParameters ( )
   _paramSet->getMatrix("ntrl_init_patch_freq", &pat_mat);
 
   if( !setSpatialMatrix("ntrl_init_patch_freq", "num of neutral loci", &pat_mat, &_init_freq, _nLoci, patchNbr) )
-	  return false;
+    return false;
 
   return true;
 } 

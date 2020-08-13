@@ -1,10 +1,10 @@
-/** $Id: binarydataloader.h,v 1.8 2015-07-13 08:52:58 fred Exp $
+/** $Id: binarydataloader.h,v 1.7.2.3 2016-11-09 14:14:16 fred Exp $
 *
 *  @file binarydataloader.h
 *  Nemo2
 *
-*  Copyright (C) 2006-2015 Frederic Guillaume
-*   frederic.guillaume@ieu.uzh.ch
+*  Copyright (C) 2006-2011 Frederic Guillaume
+*   frederic.guillaume@env.ethz.ch
 *
 *   This file is part of Nemo
 *
@@ -52,19 +52,24 @@ class BinaryDataLoader {
   
   std::string _filename;
   
-  std::map<unsigned int, unsigned int> _offset_table;
+//  std::map<unsigned int, unsigned int> _offset_table;
+
+  off_t _offsetDataStart;
+
+  unsigned int _generation_in_file;
 
   BinaryFileParser _pExtractor;
   
 public:
     
   BinaryDataLoader() : _current_sim(0),_buff(),_in_pop(0),
-                       _new_sim(0),_gen(0),_filename(),_pExtractor(0)
+                       _new_sim(0),_gen(0),_filename(),_offsetDataStart(0),
+		       _generation_in_file(0),_pExtractor(0)
     { }
   
   ~BinaryDataLoader();
  
-  int extractOffsetTable (int FD);
+  off_t extractOffsetTable (int FD);
   
   Metapop* extractPop (string& filename, unsigned int generation, SimBuilder* sim, Metapop* popPtr);
     

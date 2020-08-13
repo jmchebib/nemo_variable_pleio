@@ -350,7 +350,6 @@ public:
     for(unsigned int i = 0; i < _trait_nb; i++) {
       Traits[i]->init_sequence();
       Traits[i]->set_value();
-//      Traits[i]->init_pleio_sequence();
     }
     //we have to set the parents ids otherwise the first offspring generation will be made of full sibs only.
     static unsigned long ID = std::numeric_limits< unsigned long >::max();
@@ -375,7 +374,6 @@ public:
     if(do_inherit) inherit(_mother, _father);
     if(do_mutate)  mutate();
     setTraitValue();
-    //cout << "\nEnd of Individual::create!\t";
     return this;
   } 
   
@@ -393,7 +391,6 @@ public:
       TT->inherit(mother->getTrait(i), father->getTrait(i));
       TT->mutate();
       TT->set_value();
-      cout << "\nEnd of Individual::create2!\t";
     }
     return this;
   }

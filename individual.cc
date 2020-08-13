@@ -32,6 +32,7 @@
 #include "individual.h"
 #include "ttrait.h"
 #include "output.h"
+#include "binarystoragebuffer.cc"
 
 unsigned long Individual::currentID = 0;
 
@@ -59,9 +60,9 @@ Individual * Individual::init ()
   _mother = NULL;
   _father = NULL;
   _home = 0;
-  for(unsigned int i = 0; i < 5; i++) {
-    _matings[i] = 0; _realizedFecundity[i] = 0;
-  }
+
+  memset(&_matings[0],0, 5*sizeof(unsigned short));
+  memset(&_realizedFecundity[0], 0, 5*sizeof(unsigned short));
   
   if(_trait_nb != Traits.size()){
     error("Individual::init: trait counter and table size differ, resetting\n");
@@ -87,14 +88,14 @@ void Individual::reset ()
   _mother = NULL;
   _father = NULL;
   _home = 0;
-  for(unsigned int i = 0; i < 5; i++) {
-    _matings[i] = 0; _realizedFecundity[i] = 0;
-  }
+
+  memset(&_matings[0],0, 5*sizeof(unsigned short));
+  memset(&_realizedFecundity[0], 0, 5*sizeof(unsigned short));
    
-  if(_trait_nb != Traits.size()){
-    warning("Individual::reset: trait counter and table size differ, resetting\n");
-    _trait_nb = Traits.size();
-  }
+//  if(_trait_nb != Traits.size()){
+//    warning("Individual::reset: trait counter and table size differ, resetting\n");
+//    _trait_nb = Traits.size();
+//  }
 }
 // ----------------------------------------------------------------------------------------
 // store_data

@@ -88,13 +88,8 @@ bool LCE_Disperse_base::setBaseParameters(string prefix)
   
   _disp_propagule_prob = _paramSet->getValue(prefix + "_propagule_prob");
   
-//  for (unsigned int sex = 0; sex < 2; sex++) {
-//    if(_DispMatrix[sex]) {
-//      delete _DispMatrix[sex];
-//      _DispMatrix[sex] = NULL;
-//    }
-//  }
   
+  // connectivity matrix is specified in input --------------------------------------------
   if(_paramSet->isSet(prefix + "_connectivity_matrix") && 
      _paramSet->isSet(prefix + "_reduced_matrix"))
   {
@@ -125,6 +120,7 @@ bool LCE_Disperse_base::setBaseParameters(string prefix)
       double row_sum = 0;
       
       for (unsigned int j = 0; j < _reducedDispMat[0][i].size(); ++j) {
+//        _reducedDispMat[0][i][j]--; //remove 1 to make sure that the indexes start with 0, not 1!!!!
         _reducedDispMat[1][i].push_back( _reducedDispMat[0][i][j] );
         _reducedDispMatProba[1][i].push_back( _reducedDispMatProba[0][i][j] );
         row_sum += _reducedDispMatProba[0][i][j];
@@ -137,7 +133,7 @@ bool LCE_Disperse_base::setBaseParameters(string prefix)
     
     
   }
-  
+  // dispersal matrix is specified in input -----------------------------------------------
   else if ( (_paramSet->isSet(prefix + "_connectivity_matrix") && 
              !_paramSet->isSet(prefix + "_reduced_matrix")) || 
            (!_paramSet->isSet(prefix + "_connectivity_matrix") && 
@@ -223,7 +219,7 @@ bool LCE_Disperse_base::setBaseParameters(string prefix)
       
       setReducedDispMatrix();
       
-    } else {
+    } else { // dispersal_matrix is not given in input
       
       if(!_paramSet->isSet(prefix + "_model")) return error("Dispersal model is not set!\n");
       
@@ -1236,7 +1232,7 @@ void LCE_Disperse_ConstDisp::Migrate ()
     
   }//end for nb_patch
   
-  //put back the indviduals into the offspring container
+  //put back the individuals into the offspring container
   swapPostDisp();
 }
 // ----------------------------------------------------------------------------------------
@@ -1319,7 +1315,7 @@ LCE_SeedDisp::LCE_SeedDisp () : LifeCycleEvent ("seed_disp","")
 
 //  get_paramset()->show_up();
 }
-// ------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------
 
 //                             LCE_Disperse_EvolDisp/
 

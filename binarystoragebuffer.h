@@ -1,10 +1,10 @@
-/** $Id: binarystoragebuffer.h,v 1.6 2015-07-13 08:52:57 fred Exp $
+/** $Id: binarystoragebuffer.h,v 1.5.2.1 2016-11-09 14:14:16 fred Exp $
 *
 *  @file binarystoragebuffer.h
 *  Nemo2
 *
-*   Copyright (C) 2006-2015 Frederic Guillaume
-*   frederic.guillaume@ieu.uzh.ch
+*   Copyright (C) 2006-2011 Frederic Guillaume
+*   frederic.guillaume@env.ethz.ch
 *
 *   This file is part of Nemo
 *
@@ -33,7 +33,11 @@
 #include <string.h>
 #include "output.h"
 
-#define MAX_BUFF 1024000
+#define MAX_BUFF   10000000  //10MB
+
+#define MAX_BUCKET 500000000   //500MB
+
+class BinaryDataSaver; //forward declaration
 
 /**A class to store any kind of data in a char buffer before unloading it in a binary data file.*/
 
@@ -41,31 +45,49 @@ class BinaryStorageBuffer {
   
 private:
   char* _buff;
-  unsigned int _len, _bytes_in, _bytes_out;
+  unsigned int _num_buckets;
+  off_t _len, _bytes_in, _bytes_out, _tot_bytes_in;
+
+  BinaryDataSaver* _myDataSaver;
   
 public:
 	
-  BinaryStorageBuffer() : _buff(NULL),_len(0),_bytes_in(0),_bytes_out(0) {}
+  BinaryStorageBuffer() : _buff(NULL),_len(0),_bytes_in(0),_bytes_out(0),
+                          _num_buckets(0), _tot_bytes_in(0L), _myDataSaver(0) {}
   ~BinaryStorageBuffer() {if(_buff != NULL) delete[]_buff;}
   
   char*        getBuffer      ( )  const  {return _buff;}
-  unsigned int getByteLength  ( )  const  {return _bytes_in;} 
+  off_t        getBuffLength  ( )  const  {return _bytes_in;}
+  off_t    getTotByteRecorded ( )  const  {return _tot_bytes_in;}
   unsigned int getBytesOut    ( )  const  {return _bytes_out;} 
   void         clear          ( )         
   {
     if(_buff != NULL) delete [] _buff;
     _buff = NULL;
     _len = _bytes_in = _bytes_out = 0;
+    _num_buckets = 0; _tot_bytes_in = 0L;
   }
+
+  void         emptyBuffer    ( )
+  {
+    memset(_buff,'\0',_len);
+    _bytes_in = _bytes_out = 0;
+  }
+  // ----------------------------------------------------------------------------------------
+  // store
+  // ----------------------------------------------------------------------------------------
+  void store (void* stream, unsigned int nb_bytes);
   // ----------------------------------------------------------------------------------------
   // set_buff
   // ----------------------------------------------------------------------------------------
-  inline void set_buff()
+  inline void set_buff(BinaryDataSaver* owner)
   {
-#ifdef __DEBUG__
+#ifdef _DEBUG_
 	std::cout<<"BinaryStorageBuffer::set_buff";
 #endif
 	
+	_myDataSaver = owner;
+
 	if(_buff != NULL) delete [] _buff;
 	
 	_buff = new char[MAX_BUFF];
@@ -73,7 +95,13 @@ public:
 	if(_buff == NULL) fatal("BinaryStorageBuffer::set_buff::memory exhausted !!\n");
 	
 	_len = MAX_BUFF;
+
 	_bytes_in = 0;
+
+	_num_buckets = 0;
+
+	_tot_bytes_in = 0L;
+
 	memset(_buff,'\0',MAX_BUFF);
 	
 #ifdef _DEBUG_
@@ -83,7 +111,7 @@ public:
   // ----------------------------------------------------------------------------------------
   // set_buff
   // ----------------------------------------------------------------------------------------
-  inline void set_buff(void* zone, unsigned int length)
+  inline void set_buff(void* zone, size_t length)
   {
     if(_buff != NULL) delete [] _buff;
     
@@ -93,7 +121,11 @@ public:
     
     _bytes_in = _len = length ;
     
+    _tot_bytes_in += _bytes_in;
+
     _bytes_out = 0;
+
+    _num_buckets = 0;
   }
   // ----------------------------------------------------------------------------------------
   // extend_buff
@@ -121,25 +153,8 @@ public:
 	delete [] old_buff;
 	
 #ifdef _DEBUG_
-	std::cout<<"["<<_len/1024<<"kB]"<<std::endl;
+	std::cout<<"["<<_len<<" B]"<<std::endl;
 #endif
-  }
-  // ----------------------------------------------------------------------------------------
-  // store
-  // ----------------------------------------------------------------------------------------
-  inline void store (void* stream, unsigned int nb_bytes)
-  {
-    
-	while( !((_bytes_in + nb_bytes) < _len) ) extend_buff();
-	
-	if(nb_bytes == 1) {
-	  _buff[_bytes_in] = *(char*)stream;
-	} else {
-	  char *tab = (char*)stream;
-	  for(unsigned int i = 0; i < nb_bytes; i++)
-		_buff[_bytes_in + i] = tab[i];
-	}
-	_bytes_in += nb_bytes;
   }
   // ----------------------------------------------------------------------------------------
   // read
@@ -164,5 +179,6 @@ public:
   void BSBread(void *out, unsigned int nb_bytes)
   { read(out,nb_bytes); }
 };
+
 
 #endif

@@ -849,8 +849,7 @@ void LCE_Selection_base::execute ()
 {
   Patch * patch;
   unsigned int popSize = _popPtr->size(OFFSPRG);
-  //cout << "\nStart of LCE_Selection_base::execute() !!!\t";
-
+  
   resetCounters();
 
   if(_do_change_local_opt) {
@@ -876,7 +875,6 @@ void LCE_Selection_base::execute ()
   }
 
   setMeans(popSize);
-  //cout << "\nEnd of LCE_Selection_base::execute() !!!\t";
 }
 // ----------------------------------------------------------------------------------------
 // LCE_Selection_base::doViabilitySelection

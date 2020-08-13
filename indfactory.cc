@@ -152,7 +152,7 @@ TraitPrototype* IndFactory::getTraitPrototype (trait_t type)
 Individual* IndFactory::makeNewIndividual(Individual* mother, Individual* father, sex_t sex, unsigned short homepatch)
 {
   Individual* newind;
-  //cout << "\nStart of IndFactory::makeNewIndividual!";
+  
   if(RecyclingPOOL.empty()) {
     //create new Individual by cloning the proto-individual
     newind = _protoIndividual.clone();
@@ -175,7 +175,6 @@ Individual* IndFactory::makeNewIndividual(Individual* mother, Individual* father
     newind->setMother(mother);
     newind->setPedigreeClass(mother, father);
   }
-  //cout << "\nEnd of IndFactory::makeNewIndividual!";
   
   return newind;
 }

@@ -1,10 +1,10 @@
-/** $Id: binarydatasaver.h,v 1.7 2015-07-13 08:52:57 fred Exp $
+/** $Id: binarydatasaver.h,v 1.6.2.3 2016-11-09 14:14:16 fred Exp $
 * 
 *  @file binarydatasaver.h
 *  Nemo2
 *
-*   Copyright (C) 2006-2015 Frederic Guillaume
-*   frederic.guillaume@ieu.uzh.ch
+*   Copyright (C) 2006-2011 Frederic Guillaume
+*   frederic.guillaume@env.ethz.ch
 *
 *   This file is part of Nemo
 *
@@ -51,11 +51,22 @@ private:
   bool _isPeriodic;
   unsigned int _generation;
   
-  std::map<unsigned int, unsigned int> _offset_table;
-    
+//  std::map<unsigned int, off_t> _offset_table;
+
+  off_t _offsetDataStart;
+
+  vector< unsigned int > _occurrences;
+
+  vector< unsigned int >::const_iterator _current_occurrence;
+
+  int _fdesc;
+
+  void setFileDescriptor ();
+  int  getFileDescriptor () { return _fdesc;}
+
   void printHeader();
-  void printData();
   void storeData();
+  void printOffsetTable();
   void finish();
   
 public:
@@ -64,6 +75,9 @@ public:
   ~BinaryDataSaver () {}
 
   static pid_t PID;
+
+
+  void printData();
 
   //implements LifeCycleEvent:
   virtual bool setParameters ();

@@ -428,7 +428,6 @@ void LCE_Breed::execute()
   message("LCE_Breed::execute (Patch nb: %i offsprg nb: %i adlt nb: %i)\n"
           ,_popPtr->getPatchNbr(),_popPtr->size( OFFSPRG ),_popPtr->size( ADULTS ));
 #endif
-  //cout << "\nStart of LCE_Breed::execute() !!!!\t";
   
   if(_popPtr->size(OFFSPRG) != 0) {
     warning("offspring containers not empty at time of breeding, flushing.\n");
@@ -460,13 +459,10 @@ void LCE_Breed::execute()
         NewOffsprg = makeOffspring( do_breed(mother, father, i) );
         
         patch->add(NewOffsprg->getSex(), OFFSx, NewOffsprg);
-
+        
         nbBaby--;
       }//_END__WHILE
       
     }
-
   }
-  //cout << "\nEnd of LCE_Breed::execute() !!!!\t";
-
 }
