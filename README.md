@@ -1,5 +1,5 @@
 ## nemo_evolving_pleio
-individual-based, genetically explicit, forward-in-time, stochastic, population modelling software that allows for evolving pleiotropic connections between alleles and traits as well as evolving correlational mutations on those traits (based on Guillaume and Rougement 2006) 
+individual-based, genetically explicit, forward-in-time, stochastic, population modelling software that allows specifying the pleiotropic connections between alleles and traits as well as the correlational mutations on those traits (based on Guillaume and Rougement 2006) 
 
 #see home page and nemo2 manual for instructions on use. http://nemo2.sourceforge.net/
 
@@ -18,7 +18,7 @@ sudo apt-get libgsl0-dev
 # Step 2
 #create VERSION file outside src/ directory
 
-echo 2.3.x > VERSION
+echo 2.4.x > VERSION
 
 # Step 3 
 #create bin/directory next to src/ directory
@@ -43,7 +43,7 @@ make
 # Step 6
 #use newly created nemo program to run simulations along with init files (see nemo2 manual)
 
-./bin/nemo2.3.x-locked init_file.ini
+./bin/nemo2.4.x-locked init_file.ini
 
 
 
