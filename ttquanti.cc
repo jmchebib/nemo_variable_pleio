@@ -32,7 +32,6 @@
 #include <string.h>
 #include <cmath>
 #include <algorithm>
-//#include <sstream>
 #include "ttquanti.h"
 #include "filehandler.h"
 #include "output.h"
@@ -48,8 +47,8 @@
 
 void store_quanti_trait_values (Patch* patch, unsigned int patchID, unsigned int size, unsigned int *cntr,
                                 sex_t SEX, age_idx AGE, DataTable<double> *ptable, DataTable<double> *gtable,
-								DataTable<double> *mutcortable, DataTable<double> *pleiotable,
-								unsigned int nTrait, unsigned int nLocus, unsigned int TraitIndex);
+                                unsigned int nTrait, unsigned int TraitIndex);
+
 
 // ------------------------------------------------------------------------------
 
@@ -61,7 +60,6 @@ void store_quanti_trait_values (Patch* patch, unsigned int patchID, unsigned int
 TProtoQuanti::TProtoQuanti() :
 _nb_locus(0),
 _nb_traits(0),
-_nb_trait_pairs(0),
 _seq_length(0),
 _allele_model(0),
 _allele_value(0),
@@ -72,14 +70,11 @@ _eval(0),
 _effects_multivar(0),
 _ws(0),
 _genomic_mutation_rate(0),
-_pleio_mutation_rate(0),
-_mutcor_mutation_rate(0),
 _mutation_correlation(0),
 _mutation_sigma(0),
 _init_value(0),
 _all_chooser(0),
 _sizeofLocusType(sizeof(double)),
-//_sizeofPleioLocusType(sizeof(unsigned char));
 _eVariance(0),
 _stats(0),
 _writer(0),
@@ -93,13 +88,11 @@ _pleio_matx(0)
   add_parameter("quanti_allele_model",STR,false,false,0,0);
   add_parameter("quanti_allele_value",DBL,false,false,0,0);
   add_parameter("quanti_init_value",MAT,false,false,0,0);
-  add_parameter("quanti_init_model",INT,false,true,0,3);
+  add_parameter("quanti_init_model",INT,false,true,0,4);
   add_parameter("quanti_environmental_variance",DBL,false,false,0,0);
   add_parameter("quanti_pleio_matrix",INT,false,true,0,1); // allows user to set pleiotropic degree of loci
   
   add_parameter("quanti_mutation_rate",DBL,true,true,0,1, 0);
-  add_parameter("quanti_pleio_mutation_rate",DBL,false,true,0,1, 0);
-  add_parameter("quanti_mutcor_mutation_rate",DBL,false,true,0,1, 0);
   add_parameter("quanti_mutation_variance",DBL,false,false,0,0, 0);
   add_parameter("quanti_mutation_correlation",DBL,false,false,0,0, 0);
   add_parameter("quanti_mutation_covariance",DBL,false,false,0,0, 0);
@@ -122,7 +115,6 @@ _pleio_matx(0)
 TProtoQuanti::TProtoQuanti(const TProtoQuanti& T) : 
 _nb_locus(T._nb_locus),
 _nb_traits(T._nb_traits),
-_nb_trait_pairs(T._nb_trait_pairs),
 _seq_length(T._seq_length),
 _mutation_matrix(0),
 _gsl_mutation_matrix(0),
@@ -131,8 +123,6 @@ _eval(0),
 _effects_multivar(0),
 _ws(0),
 _genomic_mutation_rate(T._genomic_mutation_rate),
-_pleio_mutation_rate(T._pleio_mutation_rate),
-_mutcor_mutation_rate(T._mutcor_mutation_rate),
 _mutation_correlation(T._mutation_correlation),
 _mutation_sigma(0),
 _init_value(0),
@@ -145,14 +135,11 @@ _freqExtractor(0)
 { 
   _locusByteSize = T._nb_traits * sizeof(double);
   _sizeofLocusType = sizeof(double);
-  _pleiolocusByteSize = T._nb_traits * sizeof(unsigned char);
-  _sizeofPleioLocusType = sizeof(unsigned char);
   _paramSet = new ParamSet( *(T._paramSet) ) ;
   _pleio_matx = new TMatrix( *(T._pleio_matx) );
   vector< vector<unsigned int> > _trait_table;
   vector< vector<unsigned int> > _locus_table;
-  vector< vector<unsigned int> > _pleio_table;
-  vector< vector<double> > _mut_matrix;
+  //vector< vector<double> > _mut_matrix;
 }
 // ----------------------------------------------------------------------------------------
 // dstor
@@ -180,16 +167,13 @@ bool TProtoQuanti::setParameters()
   }
   _nb_traits = (unsigned int)get_parameter_value("quanti_traits");
   _nb_locus = (unsigned int)get_parameter_value("quanti_loci");
-  _nb_trait_pairs = _nb_traits * (_nb_traits - 1) / 2;
-  cout << "\n Number of trait pairs: " << _nb_trait_pairs << "\n";
 
-//  if(!get_parameter("quanti_pleio_matrix")->isSet()){
-  _seq_length = _nb_traits * _nb_locus; //mutations are pleiotropic if no quanti_pleio_matrix is provided!!!
-//  }
+  //total nbre of values for both traits in a haploid genome
+  if(!get_parameter("quanti_pleio_matrix")->isSet()){
+	  _seq_length = _nb_traits * _nb_locus; //mutations are pleiotropic if no quanti_pleio_matrix is provided!!!
+  }
   _locusByteSize = _nb_traits * sizeof(double); // could move this assignment below pleio_matx reading in order to get correct size
   _sizeofLocusType = sizeof(double);
-  _pleiolocusByteSize = _nb_traits * sizeof(unsigned char);
-  _sizeofPleioLocusType = sizeof(unsigned char);
   
   if(get_parameter("quanti_environmental_variance")->isSet())
     _eVariance = sqrt(get_parameter_value("quanti_environmental_variance"));
@@ -216,21 +200,17 @@ bool TProtoQuanti::setParameters()
     
     _init_value = new double [_nb_traits];
     
-    for(unsigned int i = 0; i < _nb_traits; i++){
+    for(unsigned int i = 0; i < _nb_traits; i++)
       _init_value[i] = tmp_matx.get(0,i);
-      cout << "\tinit value " << i << ": " << tmp_matx.get(0,i);
-    }
+    
   }
   else {
     
     _init_value = new double [_nb_traits];
     
-    for(unsigned int i = 0; i < _nb_traits; i++){
+    for(unsigned int i = 0; i < _nb_traits; i++)
       _init_value[i] = 0.0;
-      //cout << "\tinit_trait_value " << i << ": " << _init_value[i];
-    }
   }
-  cout << endl;
   
   if(get_parameter("quanti_init_model")->isSet()) {
     
@@ -256,35 +236,13 @@ bool TProtoQuanti::setParameters()
   }
   // print _pleio_matrix
   //printf("\n_pleio_matx dimensions: rows(loci) = %i, columns(traits) = %i\n",_pleio_matx->getNbRows(),_pleio_matx->getNbCols());
-  for(unsigned int i = 0; i < _pleio_matx->getNbRows(); i++) {
-	  for(unsigned int j = 0; j < _pleio_matx->getNbCols(); j++){
-		  printf("%.0f ",_pleio_matx->get(i,j));
-	  	  printf(" | ");
-  	  }
-	  printf("\n");
-  }
-  // build _pleio_table from _pleio_matx
-  if(_pleio_table.size() != 0){
-	  _pleio_table.clear();
-  }
-  for(unsigned int i=0; i<2; ++i){
-  	vector<unsigned int> temp1;
-  	for(unsigned int j=0; j<_pleio_matx->getNbRows(); ++j){
-  	  	for(unsigned int k=0; k<_pleio_matx->getNbCols(); ++k){
-  	  		temp1.push_back(_pleio_matx->get(j,k));
-  	  	}
-  	}
-  	_pleio_table.push_back(temp1);
-  }
-  // print _pleio_table (for debugging purposes only)
-  cout << "pleio_table: \n";
-  for(unsigned int i=0; i<_pleio_table.size(); ++i){
-	  for(unsigned int j=0; j<_pleio_table[i].size(); ++j){
-		  cout << _pleio_table[i][j] << " | ";
-	  }
-	  cout << endl;
-  }
-  cout << "_pleio_table length: " << _pleio_table[0].size() << endl;
+  //  for(unsigned int i = 0; i < _pleio_matx->getNbRows(); i++) {
+  //	  for(unsigned int j = 0; j < _pleio_matx->getNbCols(); j++){
+  //		  printf("%.0f ",_pleio_matx->get(i,j));
+  //	  	  printf(" | ");
+  //	  }
+  //	  printf("\n");
+  //}
 
   // create temp_table from _pleiomatx to build _trait_table and _locus_table
   vector< vector<unsigned int> > temp_table(_pleio_matx->getNbCols(),vector<unsigned int>(_pleio_matx->getNbRows()));
@@ -331,7 +289,7 @@ bool TProtoQuanti::setParameters()
 	  }
 	  cout << endl;
   }*/
-  cout << "\n_trait_size: " << _trait_table.size() << endl;
+  //cout << "\n_trait_size: " << _trait_table.size() << endl;
 
   // build _locus_table from _pleio_matx
   if(_locus_table.size() != 0){
@@ -353,14 +311,14 @@ bool TProtoQuanti::setParameters()
   	tsize=0;
   }
   // print _locus_table (for debugging purposes only)
-  cout << "locus_table: \n";
-  for(unsigned int i=0; i<_locus_table.size(); ++i){
-	  for(unsigned int j=0; j<_locus_table[i].size(); ++j){
-		  cout << _locus_table[i][j] << " | ";
-	  }
-	  cout << endl;
-  }
-  cout << "_locus_size: " << _locus_table.size() << endl;
+  //  cout << "locus_table: \n";
+  //for(unsigned int i=0; i<_locus_table.size(); ++i){
+  //	  for(unsigned int j=0; j<_locus_table[i].size(); ++j){
+  //		  cout << _locus_table[i][j] << " | ";
+  //	  }
+  //	  cout << endl;
+  //}
+  //cout << "_locus_size: " << _locus_table.size() << endl;
 
   // calculate _seq_length from _trait_table
   _seq_length = 0;
@@ -369,10 +327,10 @@ bool TProtoQuanti::setParameters()
 		  _seq_length++;
 	  }
   }
-  cout << "_seq_length: " << _seq_length << endl;
+  //cout << "_seq_length: " << _seq_length << endl;
   //return error("\" pleiotropic matrix debug check \" LEGIT");
-  _seq_length = _nb_traits * _nb_locus; // changing back to full pleiotropy for debug check
-  cout << "_seq_length: " << _seq_length << endl;
+  //_seq_length = _nb_traits * _nb_locus; // changing back to full pleiotropy for debug check
+
 
   //---------------------------------------------------------------------------------------
   if( !setMutationParameters() ) return false; //sets _allele_model
@@ -399,35 +357,36 @@ bool TProtoQuanti::setParameters()
 
   
   //---------------------------------------------------------------------------------------
-//  _mutation_func_ptrs.clear();
-//
+  _mutation_func_ptrs.clear();
+
   for(unsigned int i=0; i < _nb_locus; ++i){
-//	  if(_locus_table[i][1] == 1) {
-	  if(_nb_traits == 1) {
+	  if(_locus_table[i][1] == 1) {
     
 		  if (_allele_model == 1 || _allele_model == 2) {
 			  _mutation_func_ptrs.push_back(&TProtoQuanti::getMutationEffectUnivariateDiallelic);
-//			  _mutation_func_ptrs(&TProtoQuanti::getMutationEffectUnivariateDiallelic);
-//		      _mutation_func_ptrs = &TProtoQuanti::getMutationEffectUnivariateDiallelic;
 		  } else {
 			  _mutation_func_ptrs.push_back(&TProtoQuanti::getMutationEffectUnivariateGaussian);
-//			  _mutation_func_ptrs(&TProtoQuanti::getMutationEffectUnivariateGaussian);
-//		      _mutation_func_ptrs = &TProtoQuanti::getMutationEffectUnivariateGaussian;
 		  }
+    
+	  } else if (_locus_table[i][1] == 2) {
 
-//	  } else if (_locus_table[i][1] > 1) {
-	  } else if (_nb_traits > 1) {
+		  if (_allele_model == 1 || _allele_model == 2) {
+			  _mutation_func_ptrs.push_back(&TProtoQuanti::getMutationEffectBivariateDiallelic);
+		  } else {
+			  _mutation_func_ptrs.push_back(&TProtoQuanti::getMutationEffectMultivariateGaussian);
+		  }
+    
+	  } else if (_locus_table[i][1] > 2) {
+    
 		  if (_allele_model > 2) {
 			  _mutation_func_ptrs.push_back(&TProtoQuanti::getMutationEffectMultivariateGaussian);
-//			  _mutation_func_ptrs(&TProtoQuanti::getMutationEffectMultivariateGaussian);
-//              _mutation_func_ptrs = &TProtoQuanti::getMutationEffectMultivariateGaussian;
 		  } else {
 			  fatal("in \"quanti\" trait, the di-allelic model is only allowed for max. 2 quantitative traits.");
 		  }
     
 	  }
-  } // END of FOR loop each locus
-  cout << "\nEnd of TProtoQuanti::setParameters!\t";
+  }
+  //cout << "\nEnd of TProtoQuanti::setParameters!\t";
   return true; 
 }
 // ----------------------------------------------------------------------------------------
@@ -447,37 +406,26 @@ vector< vector<unsigned int> >& TProtoQuanti::get_locus_table()
 	return _locus_table;
 }
 // ----------------------------------------------------------------------------------------
-// get_pleio_table
-// ----------------------------------------------------------------------------------------
-vector< vector<unsigned int> >& TProtoQuanti::get_pleio_table()
-{
-	return _pleio_table;
-}
-// ----------------------------------------------------------------------------------------
 // setMutationParameters
 // ----------------------------------------------------------------------------------------
 bool TProtoQuanti::setMutationParameters ()
 {
-  cout << "\nStart of TProtoQuanti::setMutationParameters!\n";
+  //cout << "\nStart of TProtoQuanti::setMutationParameters!\n";
 
   _genomic_mutation_rate = get_parameter_value("quanti_mutation_rate") * 2 * _nb_locus;
-  if(get_parameter("quanti_pleio_mutation_rate")->isSet()){
-	  _pleio_mutation_rate = get_parameter_value("quanti_pleio_mutation_rate") * 2 * _nb_locus;
-  } else {
-	  fatal("quanti_pleio_mutation_rate is not set!");
-  }
-  if(get_parameter("quanti_mutcor_mutation_rate")->isSet()){
-	  _mutcor_mutation_rate = get_parameter_value("quanti_mutcor_mutation_rate") * 2;// * _nb_trait_pairs;
-  } else {
-	  fatal("quanti_mutcor_mutation_rate is not set!");
-  }
+  _mutation_correlation = new double [_nb_locus];
   if(get_parameter("quanti_mutation_correlation")->isSet()){
-	  _mutation_correlation = get_parameter_value("quanti_mutation_correlation");
+	  for(unsigned int loc = 0; loc < _nb_locus; loc++){
+		  _mutation_correlation[loc] = get_parameter_value("quanti_mutation_correlation");
+		  //cout << "_mutation_correlation for locus " << loc+1 << ": " << _mutation_correlation[loc] << endl;
+	  }
   } else{
-	  _mutation_correlation = 0;
+	  for(unsigned int loc = 0; loc < _nb_locus; loc++){
+		  _mutation_correlation[loc] = 0;
+	  }
   }
-  cout << "\nPleio mutation rate: " << _pleio_mutation_rate/2/_nb_locus << "\tMut Cor mutation rate: " << _mutcor_mutation_rate/2 << "\n";
   reset_mutation_pointers();
+  
   //checking allelic model
   if (get_parameter("quanti_allele_model")->isSet()) {
     
@@ -503,6 +451,7 @@ bool TProtoQuanti::setMutationParameters ()
     } else if (model == "continuous_HC") {
       
       _allele_model = 4;
+      
       return setContinuousMutationModel ();
       
     } else {
@@ -510,11 +459,12 @@ bool TProtoQuanti::setMutationParameters ()
       return false;
     }
     
-  } else { //default model
+  } 
+  else { //default model
     _allele_model = 3;
     return setContinuousMutationModel ();
   }
-  cout << "\nEnd of TProtoQuanti::setMutationParameters!\t";
+  //cout << "\nEnd of TProtoQuanti::setMutationParameters!\t";
 
   return true;
 }
@@ -588,59 +538,54 @@ bool TProtoQuanti::setDiallelicMutationModel ()
 bool TProtoQuanti::setContinuousMutationModel ()
 {
   //cout << "\nStart of TProtoQuanti::setContinuousMutationModel!\t";
-  unsigned int dims[2];
-  _mutation_matrix = new TMatrix;
-//  _gsl_mutation_matrix = new gsl_matrix [_nb_locus]();
-//  _eval = new gsl_vector [_nb_locus];
-//  _evect = new gsl_matrix [_nb_locus];
-//  _effects_multivar = new gsl_vector [_nb_locus];
-//  _ws = new gsl_vector [_nb_locus];
-//  _mutation_sigma = new double* [_nb_locus];
+
+  //_mutation_matrix = new TMatrix;
+  _gsl_mutation_matrix = new gsl_matrix* [_nb_locus]();
+  _eval = new gsl_vector* [_nb_locus];
+  _evect = new gsl_matrix* [_nb_locus];
+  _effects_multivar = new gsl_vector* [_nb_locus];
+  _ws = new gsl_vector* [_nb_locus];
+  _mutation_sigma = new double* [_nb_locus];
+  vector< vector<double> > _mut_matrix;
 
   //assert(_mutation_sigma == NULL);
   if(_mut_matrix.size() != 0){
 	  _mut_matrix.clear();
   }
-//  for(unsigned int loc = 0; loc < _nb_locus; loc++){
-//	  unsigned int pleio_deg = _locus_table[loc][1];
-	_mutation_sigma = new double [_nb_traits];
+  for(unsigned int loc = 0; loc < _nb_locus; loc++){
+	  unsigned int pleio_deg = _locus_table[loc][1];
+	  _mutation_sigma[loc] = new double [pleio_deg];
 
-	//setting the mutation variance-covariance matrix
-	if(get_parameter("quanti_mutation_variance")->isSet()) {
- 	  if(get_parameter("quanti_mutation_matrix")->isSet()) {
-		  warning("both \"quanti_mutation_variance\" and \"quanti_mutation_matrix\" are set, using the matrix only!\n");
-	  } else {
- 	    //_mutation_sigma[loc] = new double [pleio_deg];
- 		  double sigma = sqrt( get_parameter_value("quanti_mutation_variance") );
+	  //setting the mutation variance-covariance matrix
+	  if(get_parameter("quanti_mutation_variance")->isSet()) {
+    
+		  if(get_parameter("quanti_mutation_matrix")->isSet()) {
+			  warning("both \"quanti_mutation_variance\" and \"quanti_mutation_matrix\" are set, using the matrix only!\n");
+		  } else {
       
-		  for(unsigned int i = 0; i < _nb_traits; i++)
-			  _mutation_sigma[i] = sigma;
+			  //_mutation_sigma[loc] = new double [pleio_deg];
       
-		  if(_nb_traits > 1) {
-		  //setting the mutation matrix
-			  _gsl_mutation_matrix = gsl_matrix_alloc(_nb_traits, _nb_traits);
-
-			  double covar, var = get_parameter_value("quanti_mutation_variance");
-
-			  covar = _mutation_correlation * var;
+			  double sigma = sqrt( get_parameter_value("quanti_mutation_variance") );
+      
+			  for(unsigned int i = 0; i < pleio_deg; i++)
+				  _mutation_sigma[loc][i] = sigma;
+      
+			  if(pleio_deg > 1) {
+				  //setting the mutation matrix
+				  _gsl_mutation_matrix[loc] = gsl_matrix_alloc(pleio_deg, pleio_deg);
         
-			  for(unsigned int i = 0; i < _nb_traits; i++) {
-				  gsl_matrix_set(_gsl_mutation_matrix, i, i, var);
-			  }
-			  for(unsigned int i = 0; i < _nb_traits - 1; i++) {
-				  for(unsigned int j = i + 1 ; j < _nb_traits; j++) {
-					  gsl_matrix_set(_gsl_mutation_matrix, i, j, covar);
-					  gsl_matrix_set(_gsl_mutation_matrix, j, i, covar);
-				  }
-			  }
-			  // create accessible mutation matrix from gsl_mutation_matrix
-			  for(unsigned int j=0; j<_nb_traits; ++j){
-			    vector<double> temp1;
-			    for(unsigned int k=0; k<_nb_traits; ++k){
-				  temp1.push_back(gsl_matrix_get(_gsl_mutation_matrix,j,k));
-				}
-				_mut_matrix.push_back(temp1);
-			  }
+				  double covar, var = get_parameter_value("quanti_mutation_variance");
+
+				  covar = _mutation_correlation[loc] * var;
+        
+				  for(unsigned int i = 0; i < pleio_deg; i++)
+					  gsl_matrix_set(_gsl_mutation_matrix[loc], i, i, var);
+        
+				  for(unsigned int i = 0; i < pleio_deg - 1; i++)
+					  for(unsigned int j = i + 1 ; j < pleio_deg; j++) {
+						  gsl_matrix_set(_gsl_mutation_matrix[loc], i, j, covar);
+						  gsl_matrix_set(_gsl_mutation_matrix[loc], j, i, covar);
+					  }
 
 //				  cout << "_gsl_mutation_matrix for locus " << loc+1 << " \n";
 //				  for(unsigned int i=0; i<pleio_deg; ++i){
@@ -650,18 +595,21 @@ bool TProtoQuanti::setContinuousMutationModel ()
 //				      cout << endl;
 //				  }
 
-			  _evect = gsl_matrix_alloc(_nb_traits, _nb_traits);
-			  _eval = gsl_vector_alloc(_nb_traits);
+				  _evect[loc] = gsl_matrix_alloc(pleio_deg, pleio_deg);
+				  _eval[loc] = gsl_vector_alloc(pleio_deg);
 
-			  set_mutation_matrix_decomposition();
+				  set_mutation_matrix_decomposition(loc,pleio_deg);
 
-	          _effects_multivar = gsl_vector_alloc(_nb_traits);
-  			  _ws = gsl_vector_alloc(_nb_traits);
-		  }
+			  	  if(pleio_deg > 1) {
+		             _effects_multivar[loc] = gsl_vector_alloc(pleio_deg);
+					 _ws[loc] = gsl_vector_alloc(pleio_deg);
+			      }
+			  }
 				  //_mutation_matrix->set_from_gsl_matrix(_gsl_mutation_matrix[loc]);
 				  //_mutation_matrix->get_dims(&dims[0]);
 				  //cout << "_mutation_matrix dims: " << dims[0] << " | " << dims[1] << endl;
 
+				  // TODO create a _mut_matrix from var and covar as below? Not sure if needed.
 				  /*unsigned int pos = 0;
 				  for(unsigned int i=0; i<_nb_traits-1; i++){
 					  _mut_matrix[loc][pos+i]=var;
@@ -671,86 +619,77 @@ bool TProtoQuanti::setContinuousMutationModel ()
 					  pos += _nb_traits;
 				  }
 				  _mut_matrix[loc][_nb_traits*_nb_traits-1]=var;*/
-	  }
-    } // END if(get_parameter("quanti_mutation_variance")->isSet())
+		  }
+	  } // END if(get_parameter("quanti_mutation_variance")->isSet())
   
-	if(get_parameter("quanti_mutation_matrix")->isSet()) {
-		  get_parameter("quanti_mutation_matrix")->getMatrix(_mutation_matrix);
-		  _mutation_matrix->get_dims(&dims[0]);
+	  if(get_parameter("quanti_mutation_matrix")->isSet()) {
 
-		  if( dims[0] != _nb_traits || dims[1] != _nb_traits) {
-		    error("\"quanti_mutation_matrix\" must be a square matrix of size = \"quanti_traits\" x \"quanti_traits\"\n");
-		    return false;
-		  }
-		  _gsl_mutation_matrix = gsl_matrix_alloc(dims[0], dims[1]);
+		  if(_mut_matrix.size() != 0){
+			 _mut_matrix.clear();
+	  	  }
+		  get_parameter("quanti_mutation_matrix")->getVariableMatrix(&_mut_matrix);
 
-		  _mutation_matrix->get_gsl_matrix(_gsl_mutation_matrix);
-
-//		  cout << "_gsl_mutation_matrix:\n";
-//		  for(unsigned int i=0; i<_nb_traits; ++i){
-//		    for(unsigned int j=0; j<_nb_traits; ++j){
-//		   	  cout << gsl_matrix_get(_gsl_mutation_matrix,i,j) << " | ";
-//		    }
-//		    cout << endl;
-//		  }
-
-		  // create accessible mutation matrix from gsl_mutation_matrix
-		  for(unsigned int j=0; j<_nb_traits; ++j){
-		    vector<double> temp1;
-		    for(unsigned int k=0; k<_nb_traits; ++k){
-			  temp1.push_back(gsl_matrix_get(_gsl_mutation_matrix,j,k));
-			}
-			_mut_matrix.push_back(temp1);
-		  }
 		  // Print out mut_matrix for debugging purposes
-//		  cout << "_mut_matrix:\n";
-//		  for(unsigned int i=0; i<_nb_traits; ++i){
-//			for(unsigned int j=0; j<_nb_traits; ++j){
-//   			  cout << _mut_matrix[i][j] << " | ";
-//    		}
-//     	    cout << endl;
-//		  }
+//		  cout << "_mut_matrix for locus " << loc+1 << "\n";
+//   		  for(unsigned int j=0; j<_mut_matrix[loc].size(); ++j){
+//   			  cout << _mut_matrix[loc][j] << " | ";
+//   		  }
+//   		  cout << endl;
 
-//		  get_parameter("quanti_mutation_matrix")->getVariableMatrix(&_mut_matrix);
-//
-//		  if( _mut_matrix.size() != (_nb_traits*_nb_traits)) {
-//			  error("\"quanti_mutation_matrix\" must be a matrix of size = \"quanti_traits\" BY \"quanti_traits\"\n");
-//		  	  return false;
-//		  }
-//
-//		  _gsl_mutation_matrix = gsl_matrix_alloc(_nb_traits, _nb_traits);
-//		  for(unsigned long int i=0; i<_nb_traits; i++){
-//			  for(unsigned long int j=0; j<_nb_traits; j++){
-//				  gsl_matrix_set(_gsl_mutation_matrix,i,j,(_mut_matrix[i][j]));
-//			  }
-//		  }
-
-		  _mutation_sigma = new double [_nb_traits];
-
-		  if(_nb_traits == 1){
-			  _mutation_sigma[0] = sqrt(_mut_matrix[0][0]);
+		  if( _mut_matrix.size() != _nb_locus || _mut_matrix[loc].size() != (pleio_deg*pleio_deg)) {
+			  error("\"quanti_mutation_matrix\" must be a matrix of size = \"quanti_loci\" BY (\"quanti_traits\" x \"quanti_traits\")\n");
+		  	  return false;
 		  }
 
-		  else if(_nb_traits > 1){
-			  for(unsigned int i = 0; i < _nb_traits; i++){
-				  _mutation_sigma[i] = sqrt(gsl_matrix_get(_gsl_mutation_matrix,i,i));
+		  //_mutation_matrix[loc].get_gsl_matrix(_gsl_mutation_matrix);
+		  _gsl_mutation_matrix[loc] = gsl_matrix_alloc(pleio_deg, pleio_deg);
+		  unsigned int mmpos2 = 0;
+		  for(unsigned long int i=0; i<pleio_deg; i++){
+			  for(unsigned long int j=0; j<pleio_deg; j++){
+				  gsl_matrix_set(_gsl_mutation_matrix[loc],i,j,_mut_matrix[loc][mmpos2]);
+				  mmpos2++;
 			  }
-			  _evect = gsl_matrix_alloc(_nb_traits, _nb_traits);
-			  _eval = gsl_vector_alloc(_nb_traits);
-
-			  set_mutation_matrix_decomposition(); // only needs allele of individual for mut_cor
-
-			  _effects_multivar = gsl_vector_alloc(_nb_traits);
-			 _ws = gsl_vector_alloc(_nb_traits);
 		  }
+//		  cout << "\n_gsl_mutation_matrix for locus " << loc+1 << " \n";
+//		  for(unsigned int i=0; i<pleio_deg; ++i){
+//			  for(unsigned int j=0; j<pleio_deg; ++j){
+//				  cout << gsl_matrix_get(_gsl_mutation_matrix[loc],i,j) << " | ";
+//		      }
+//		      cout << endl;
+//		  }
 
-		  // Print out mut_matrix for debugging purposes
-		  cout << "\n_mut_matrix \n";
-		  for(unsigned int i=0; i<_nb_traits; ++i){
-   		    for(unsigned int j=0; j<_nb_traits; ++j){
-   			  cout << _mut_matrix[i][j] << " | ";
-   		    }
-   		    cout << endl;
+		  _mutation_sigma[loc] = new double [pleio_deg];
+    
+		  if(pleio_deg == 1){
+			  _mutation_sigma[loc][0] = sqrt(_mut_matrix[loc][0]);
+			  //cout << "mutation_sigma :" << _mutation_sigma[loc][0] << endl;
+		  }
+//		  else if(pleio_deg == 2){
+//			  _mutation_sigma[loc][0] = sqrt(_mut_matrix[loc][0]);
+//			  _mutation_sigma[loc][1] = sqrt(_mut_matrix[loc][3]);
+//			  //cout << "_mutation_sigma 1 and 2: " << _mutation_sigma[loc][0] << " | " <<_mutation_sigma[loc][1] << endl;
+//			  _mutation_correlation[loc] = _mut_matrix[loc][1] / sqrt(_mut_matrix[loc][0]*_mut_matrix[loc][3]);
+//			  //cout << "Mutation correlation for locus " << loc+1 << ": " << _mutation_correlation[loc] << "\n";
+//
+//			  _evect[loc] = gsl_matrix_alloc(pleio_deg, pleio_deg);
+//			  _eval[loc] = gsl_vector_alloc(pleio_deg);
+//
+//			  set_mutation_matrix_decomposition(loc,pleio_deg);
+//		  }
+		  else if(pleio_deg > 1){
+			  for(unsigned int i = 0; i < pleio_deg; i++){
+				  _mutation_sigma[loc][i] = sqrt(gsl_matrix_get(_gsl_mutation_matrix[loc],i,i));
+			  } // Would _mutation_sigma ever be needed for > 2 traits?
+			  _mutation_correlation[loc] = _mut_matrix[loc][1] / sqrt(_mut_matrix[loc][0]*_mut_matrix[loc][pleio_deg*pleio_deg-1]);
+			  //cout << "Mutation correlation for locus " << loc+1 << ": " << _mutation_correlation[loc] << "\n";
+
+			  _evect[loc] = gsl_matrix_alloc(pleio_deg, pleio_deg);
+			  _eval[loc] = gsl_vector_alloc(pleio_deg);
+
+			  set_mutation_matrix_decomposition(loc,pleio_deg);
+
+			  _effects_multivar[loc] = gsl_vector_alloc(pleio_deg);
+			 _ws[loc] = gsl_vector_alloc(pleio_deg);
 		  }
 	  } // END if(get_parameter("quanti_mutation_matrix")->isSet())
 	  else if(!get_parameter("quanti_mutation_variance")->isSet()) {
@@ -763,41 +702,57 @@ bool TProtoQuanti::setContinuousMutationModel ()
     _mutation_matrix->show_up();
     message("-- MMatrix decomposition:\n");
     for(unsigned int i = 0; i < _nb_traits; i++)
-      cout<<gsl_vector_get(_eval,i)<<" ";
+      cout<<gsl_vector_get(_eval[loc],i)<<" ";
     cout<<endl;
-    if(_nb_traits == 2) message("-- mutation correlation: %f\n",_mutation_correlation);
+    if(_nb_traits == 2) message("-- mutation correlation: %f\n",_mutation_correlation[loc]);
 #endif
-//  } // END of FOR loop for each locus used in variable pleiotropy
+//    cout << "Mutation sigmas for locus " << loc+1 << ":  ";
+//    for(unsigned int i = 0; i < pleio_deg; i++){
+//   		cout <<	_mutation_sigma[loc][i] << " | ";
+//   	} cout << "\n";
+  }
   //cout << "\nEnd of TProtoQuanti::setContinuousMutationModel!\t";
   return true;
 }
 // ----------------------------------------------------------------------------------------
 // set_mutation_matrix_decomposition
 // ----------------------------------------------------------------------------------------
-void TProtoQuanti::set_mutation_matrix_decomposition	()
+void TProtoQuanti::set_mutation_matrix_decomposition	(unsigned int loc, unsigned int pleio_deg)
 {
   //  cout << "\nStart of TProtoQuanti::set_mutation_matrix_decomposition!\t";
 
-	gsl_matrix *E = gsl_matrix_alloc(_nb_traits,_nb_traits);
-	gsl_matrix_memcpy(E,_gsl_mutation_matrix);
-  	gsl_eigen_symmv_workspace * w = gsl_eigen_symmv_alloc (_nb_traits);
-  	gsl_eigen_symmv (E, _eval, _evect, w);
+	gsl_matrix *E = gsl_matrix_alloc(pleio_deg,pleio_deg);
+	gsl_matrix_memcpy(E,_gsl_mutation_matrix[loc]);
+  	gsl_eigen_symmv_workspace * w = gsl_eigen_symmv_alloc (pleio_deg);
+  	gsl_eigen_symmv (E, _eval[loc], _evect[loc], w);
   	gsl_eigen_symmv_free (w);
   	gsl_matrix_free(E);
 #ifdef _DEBUG_
   message("-- Mutation matrix eigenvalues:\n");
   for(unsigned int i = 0; i < _nb_traits; i++)
-    cout<<gsl_vector_get(_eval,i)<<" ";
+    cout<<gsl_vector_get(_eval[loc],i)<<" ";
   cout<<endl;
 #endif
   	double eval;
   	//take square root of eigenvalues, will be used in Gaussian as stdev
-  	for(unsigned int i = 0; i < _nb_traits; i++) {
-  		eval = gsl_vector_get(_eval,i);
+  	for(unsigned int i = 0; i < pleio_deg; i++) {
+  		eval = gsl_vector_get(_eval[loc],i);
   		eval = (eval < 0.000001 ? 0 : eval);
-  		gsl_vector_set( _eval, i, sqrt(eval) );
+  		gsl_vector_set( _eval[loc], i, sqrt(eval) );
   	}
 
+  	// DEBUG OUTPUT ------------------------------------------------------
+/*  	cout << "\n_gsl_mutation_matrix eigen values: ";
+  	for(unsigned int i = 0; i < pleio_deg; i++)
+  		cout<<gsl_vector_get(_eval[loc],i)<<" ";
+  	cout << "\n_gsl_mutation_matrix eigen vectors: \n";
+  	for(unsigned int i = 0; i < pleio_deg; i++){
+  		for(unsigned int j = 0; j < pleio_deg; j++){
+  			cout<<gsl_matrix_get(_evect[loc],i,j)<<" | ";
+  		}
+  		cout<<endl;
+  	}*/
+  	// DEBUG OUTPUT ------------------------------------------------------
    //cout << "\nEnd of TProtoQuanti::set_mutation_matrix_decomposition!\t";
 }
 // ----------------------------------------------------------------------------------------
@@ -805,26 +760,27 @@ void TProtoQuanti::set_mutation_matrix_decomposition	()
 // ----------------------------------------------------------------------------------------
 double* TProtoQuanti::getMutationEffectMultivariateGaussian (unsigned int loc)
 {
-  RAND::MultivariateGaussian(_eval, _evect, _ws, _effects_multivar);
+  RAND::MultivariateGaussian(_eval[loc], _evect[loc], _ws[loc], _effects_multivar[loc]);
   //cout << "_effects_multivar 1: " << _effects_multivar[loc] << " | " << endl;
-  return _effects_multivar->data;
+  return _effects_multivar[loc]->data;
 }
 // ----------------------------------------------------------------------------------------
 // getMutationEffectBivariateGaussian
 // ----------------------------------------------------------------------------------------
 double* TProtoQuanti::getMutationEffectBivariateGaussian   (unsigned int loc)
 {
-  RAND::BivariateGaussian(_mutation_sigma[0], _mutation_sigma[1], _mutation_correlation,
+  RAND::BivariateGaussian(_mutation_sigma[loc][0], _mutation_sigma[loc][1], _mutation_correlation[loc],
                           &_effects_bivar[0], &_effects_bivar[1]);
   //cout << "\n_effects_bivar 1 and 2: " << _effects_bivar[0] << " | " << _effects_bivar[1];
   return &_effects_bivar[0];
 }
+
 // ----------------------------------------------------------------------------------------
 // getMutationEffectUnivariateGaussian
 // ----------------------------------------------------------------------------------------
 double* TProtoQuanti::getMutationEffectUnivariateGaussian   (unsigned int loc)
 {
-  _effects_bivar[0] = RAND::Gaussian(_mutation_sigma[0]);
+  _effects_bivar[0] = RAND::Gaussian(_mutation_sigma[loc][0]);
   return &_effects_bivar[0];
 }
 // ----------------------------------------------------------------------------------------
@@ -842,57 +798,11 @@ double* TProtoQuanti::getMutationEffectBivariateDiallelic   (unsigned int loc)
 {
   bool pos = RAND::RandBool();
   _effects_bivar[0] = _allele_value[loc][pos];
-  _effects_bivar[1] = _allele_value[loc][ (RAND::Uniform() < _mutation_correlation ?
-                                           pos : RAND::RandBool()) ];
-  //cout << "_effects_bivar 1 and 2: " << _effects_bivar[0] << " | " << _effects_bivar[1] << endl;
+  //  _effects_bivar[1] = _allele_value[loc][pos]; // effects on both traits always the same -->> GWAS version!
+  _effects_bivar[1] = _allele_value[loc][ (RAND::Uniform() < _mutation_correlation[loc] ?
+                                           pos : RAND::RandBool()) ]; // effects on both traits can be different
+  //  cout << "_effects_bivar 1 and 2: " << _effects_bivar[0] << " | " << _effects_bivar[1] << endl;
   return &_effects_bivar[0];
-}
-//---------------------------------------------------------------------------------------------
-// getContinuousMutationModel
-//---------------------------------------------------------------------------------------------
-void TProtoQuanti::getContinuousMutationModel (double** _mutcor_sequence)
-{
-  //cout << "\nStart of TProtoQuanti::getContinuousMutationModel!\t";
-
-//  _gsl_mutation_matrix = new gsl_matrix* [_nb_locus]();
-//  _eval = new gsl_vector* [_nb_locus];
-//  _evect = new gsl_matrix* [_nb_locus];
-//  _effects_multivar = new gsl_vector* [_nb_locus];
-//  _ws = new gsl_vector* [_nb_locus];
-
-  if(_nb_traits > 1) {
-	  //setting the mutation matrix
-	  _gsl_mutation_matrix = gsl_matrix_alloc(_nb_traits, _nb_traits);
-
-	for(unsigned int i = 0; i < _nb_traits; i++)
-		gsl_matrix_set(_gsl_mutation_matrix, i, i, _mut_matrix[i][i]); // STATIC mut variances
-//	cout << "\nNumber of trait pairs getConinuousMutationModel: " << _nb_trait_pairs;
-	unsigned int pos = 0;
-	while(pos != _nb_trait_pairs){
-	  for(unsigned int i = 0; i < _nb_traits - 1; i++){
-		for(unsigned int j = i + 1 ; j < _nb_traits; j++){
-		  unsigned int covar = (0.5*(_mutcor_sequence[0][pos]+_mutcor_sequence[1][pos])*(sqrt(_mut_matrix[i][i])*sqrt(_mut_matrix[j][j])));
-		  gsl_matrix_set(_gsl_mutation_matrix, i, j, covar);
-		  gsl_matrix_set(_gsl_mutation_matrix, j, i, covar);
-		  pos++;
-		}
-	  }
-	}
-	_evect = gsl_matrix_alloc(_nb_traits, _nb_traits);
-	_eval = gsl_vector_alloc(_nb_traits);
-
-	set_mutation_matrix_decomposition();
-
-    _effects_multivar = gsl_vector_alloc(_nb_traits);
-    _ws = gsl_vector_alloc(_nb_traits);
-  }
-}
-// ----------------------------------------------------------------------------------------
-// get_mut_matrix
-// ----------------------------------------------------------------------------------------
-vector< vector<double> >& TProtoQuanti::get_mut_matrix()
-{
-	return _mut_matrix;
 }
 // ----------------------------------------------------------------------------------------
 // reset_mutation_pointers
@@ -947,7 +857,7 @@ void TProtoQuanti::reset_mutation_pointers()
 // ----------------------------------------------------------------------------------------
 // inherit
 // ----------------------------------------------------------------------------------------
-inline void TProtoQuanti::inherit_free (sex_t SEX, double* seq, unsigned char* pleio_seq, double* mutcor_seq, double** parent, unsigned char** pleio_parent, double** mutcor_parent)
+inline void TProtoQuanti::inherit_free (sex_t SEX, double* seq, double** parent)
 {
   //cout << "\nStart of TProtoQuanti::inherit_free!\t";
 
@@ -958,53 +868,45 @@ inline void TProtoQuanti::inherit_free (sex_t SEX, double* seq, unsigned char* p
   
   for(unsigned int i = 0; i < _nb_locus; ++i) {
     
-    bloc = i*_nb_traits;
-//    bloc = _locus_table[i][0];
-    memcpy(&seq[bloc], &parent[ _all_chooser[i] ][bloc], _locusByteSize);
-    memcpy(&pleio_seq[bloc], &pleio_parent[ _all_chooser[i] ][bloc], _pleiolocusByteSize);
-//    memcpy(&seq[bloc], &parent[ _all_chooser[i] ][bloc], _locus_table[i][1]*_sizeofLocusType); // variable pleiotropy
+    //bloc = i*_nb_traits;
+    bloc = _locus_table[i][0];
+
+//    memcpy(&seq[bloc], &parent[ _all_chooser[i] ][bloc], _locusByteSize);
+    memcpy(&seq[bloc], &parent[ _all_chooser[i] ][bloc], _locus_table[i][1]*_sizeofLocusType);
   }
-// completely linked mut_cors for all trait pairs
-  bool _all_chooser2 = 0; //RAND::RandBool();
-  memcpy(&mutcor_seq[0], &mutcor_parent[_all_chooser2][0], _nb_trait_pairs*sizeof(double));
-// unlinked mut_cors for each trait pair
-//  for(unsigned int j = 0; j < _nb_trait_pairs; ++j ){
-//	bool _all_chooser2 = RAND::RandBool();
-//	memcpy(&mutcor_seq[j], &mutcor_parent[_all_chooser2][j], sizeof(double));
-//  }
   //cout << "\nEnd of TProtoQuanti::inherit_free!\t";
 }
 // ----------------------------------------------------------------------------------------
 // inherit
 // ----------------------------------------------------------------------------------------
-inline void TProtoQuanti::inherit_low (sex_t SEX, double* seq, unsigned char* pleio_seq, double* mutcor_seq, double** parent, unsigned char** pleio_parent, double** mutcor_parent)
+inline void TProtoQuanti::inherit_low (sex_t SEX, double* seq, double** parent)
 {
   //cout << "\nStart of TProtoQuanti::inherit_low!\t";
   register unsigned int prevLoc = 0, chrm_bloc = 0, prev_bloc, cpy_bloc;
   register bool flipper;
-
+  
   //the table containing the loci at which x-overs happen
   vector< unsigned int >& recTable = _map.getRecLoci(SEX, _mapIndex);
-
+  
   //the table containing which homologous chromosome copy we start with, for each chromosome
   vector< bool > & firstRecPos = _map.getFirstRecPosition(SEX);
-
+  
   //number of x-overs
   unsigned int nbRec = recTable.size();
-
+  
   //  cout << "TProtoQuanti::inherit; sex="<<SEX<<"; nb Rec = "<<nbRec;//<<endl;
   
   // c is the chromosome number
   // stride is the number of loci considered so-far
   // rec is the number of x-over done so-far
   for(unsigned int c = 0, stride = 0, rec = 0; c < _numChromosome; ++c) {
-
+    
     //the copy of the chromosome with which with start
     flipper = firstRecPos[c];
-
+    
     //number of loci copied so-far
     chrm_bloc = stride + _numLociPerChrmsm[c];
-
+    
     //last locus at which a x-over happened, will be first position on current chromosome
     prevLoc = stride;
     
@@ -1013,22 +915,22 @@ inline void TProtoQuanti::inherit_low (sex_t SEX, double* seq, unsigned char* pl
     // copy blocs of loci between x-over points on current chromosome
     // skip it if locus is not on this chromosome but a latter one
     for(; recTable[rec] < chrm_bloc && rec < nbRec; rec++) {
-
+      
       // start position of the bloc of values to copy (_nb_traits values per locus)
-      prev_bloc = prevLoc * _nb_traits;
-      //prev_bloc = _locus_table[prevLoc][0]; // for non-universal pleiotropy
-
+      //prev_bloc = prevLoc * _nb_traits;
+      prev_bloc = _locus_table[prevLoc][0]; // for non-universal pleiotropy
+      
       // size of the bloc to copy
-      cpy_bloc = (recTable[rec] - prevLoc) * _nb_traits;
-//      cpy_bloc = 0;
-//      for (unsigned int i = prevLoc; i < recTable[rec]; ++i){ // for non-universal pleiotropy
-//    	  cpy_bloc += _locus_table[i][1];
-//      } // for each locus between current x-over and previous x-over sum their pleiotropic degrees
+      //cpy_bloc = (recTable[rec] - prevLoc) * _nb_traits;
+      cpy_bloc = 0;
+      for (unsigned int i = prevLoc; i < recTable[rec]; ++i){ // for non-universal pleiotropy
+    	  cpy_bloc += _locus_table[i][1];
+      } // for each locus between current x-over and previous x-over sum their pleiotropic degrees
       //      cout<<"copy seq from "<<prevLoc<<"("<<prev_bloc<<") to "<<recTable[rec]
       //      <<"("<<(recTable[rec] - prevLoc)<<" loc) ("<<cpy_bloc*_locusByteSize<<"B) side "<<flipper<<endl;
-
+      
+      //memcpy(&seq[prev_bloc], &parent[flipper][prev_bloc], cpy_bloc * _sizeofLocusType);
       memcpy(&seq[prev_bloc], &parent[flipper][prev_bloc], cpy_bloc * _sizeofLocusType);
-      memcpy(&pleio_seq[prev_bloc], &pleio_parent[flipper][prev_bloc], cpy_bloc * _sizeofPleioLocusType);
 
       //update the starting locus to the next recombination point
       prevLoc = recTable[rec];
@@ -1036,33 +938,24 @@ inline void TProtoQuanti::inherit_low (sex_t SEX, double* seq, unsigned char* pl
       //switch side for next bloc to copy on this chromosome
       flipper = !flipper;
     }
+    
+    //prev_bloc = prevLoc * _nb_traits;
+    prev_bloc = _locus_table[prevLoc][0]; // for non-universal pleiotropy
 
-    prev_bloc = prevLoc * _nb_traits;
-//    prev_bloc = _locus_table[prevLoc][0]; // for non-universal pleiotropy
-
-    cpy_bloc = (chrm_bloc - prevLoc) * _nb_traits;
-//    cpy_bloc = 0;
-//    for (unsigned int i = prevLoc; i < chrm_bloc; ++i){ // for non-universal pleiotropy
-//  	  cpy_bloc += _locus_table[i][1];
-//    } // for each locus between prevLoc and end of chrmsm sum their pleiotropic degrees
+    //cpy_bloc = (chrm_bloc - prevLoc) * _nb_traits;
+    cpy_bloc = 0;
+    for (unsigned int i = prevLoc; i < chrm_bloc; ++i){ // for non-universal pleiotropy
+  	  cpy_bloc += _locus_table[i][1];
+    } // for each locus between prevLoc and end of chrmsm sum their pleiotropic degrees
     //    cout << "copy end of chrmsm from "<<prevLoc<<" to "<<chrm_bloc
     //         <<"("<<(chrm_bloc - prevLoc)<<" loc) on side "<<flipper<<endl;
-
+    
     //copy what's left between the last x-over point and the end of the chrmsme
+    //memcpy(&seq[prev_bloc], &parent[flipper][prev_bloc], cpy_bloc * _sizeofLocusType);
     memcpy(&seq[prev_bloc], &parent[flipper][prev_bloc], cpy_bloc * _sizeofLocusType);
-    memcpy(&pleio_seq[prev_bloc], &pleio_parent[flipper][prev_bloc], cpy_bloc * _sizeofPleioLocusType);
 
     stride += _numLociPerChrmsm[c];
   }
-
-  // completely linked mut_cors for all trait pairs
-  bool _all_chooser2 = RAND::RandBool();
-  memcpy(&mutcor_seq[0], &mutcor_parent[_all_chooser2][0], _nb_trait_pairs*sizeof(double));
-  // unlinked mut_cors for each trait pair
-//  for(unsigned int j = 0; j < _nb_trait_pairs; ++j ){
-//  bool _all_chooser2 = RAND::RandBool();
-//  memcpy(&mutcor_seq[j], &mutcor_parent[_all_chooser2][j], sizeof(double));
-//  }
   //cout << "\nEnd of TProtoQuanti::inherit_low!\t";
 }
 // ----------------------------------------------------------------------------------------
@@ -1077,13 +970,9 @@ TTQuanti* TProtoQuanti::hatch()
   kid->set_nb_locus(_nb_locus);
   kid->set_nb_traits(_nb_traits);
   kid->set_seq_length(_seq_length);
-  kid->set_nb_trait_pairs(_nb_trait_pairs);
   kid->set_genomic_mutation_rate(_genomic_mutation_rate);
-  kid->set_pleio_mutation_rate(_pleio_mutation_rate);
-  kid->set_mutcor_mutation_rate(_mutcor_mutation_rate);
   kid->set_init_value(_init_value, _doInitMutation);
   kid->set_mutation_fptr((_allele_model != 1 && _allele_model != 3));
-//  kid->set_mutation_fptr(_mutation_func_ptrs, (_allele_model != 1 && _allele_model != 3));
   if(_recombRate == 0.5) //member of TTProtoWithMap
     kid->set_inherit_fptr(&TProtoQuanti::inherit_free);
   else
@@ -1097,63 +986,63 @@ TTQuanti* TProtoQuanti::hatch()
 // loadFileServices
 // ----------------------------------------------------------------------------------------
 void TProtoQuanti::loadFileServices  (FileServices* loader)
-{
+{ 
   //cout << "\nStart of TProtoQuanti::loadFileServices!\t";
 
   int logtime = 0;
   //writer
   if(get_parameter("quanti_output")->isSet()) {
-
+    
     if(_writer == NULL) _writer = new TTQuantiFH(this);
-
+    
     _writer->setOutputOption(get_parameter("quanti_output")->getArg());
-
+    
     Param* param = get_parameter("quanti_logtime");
-
+    
     if(param->isMatrix()) {
-
+      
       TMatrix temp;
       param->getMatrix(&temp);
       _writer->set_multi(true, true, 1, &temp, get_parameter("quanti_dir")->getArg());
-
-    } else   //  rpl_per, gen_per, rpl_occ, gen_occ, rank (0), path, self-ref
+      
+    } else   //  rpl_per, gen_per, rpl_occ, gen_occ, rank (0), path, self-ref      
       _writer->set(true, true, 1, (param->isSet() ? (int)param->getValue() : 0),
                    0, get_parameter("quanti_dir")->getArg(),this);
-
+    
     loader->attach(_writer);
-
+    
   } else if(_writer != NULL) {
     delete _writer;
     _writer = NULL;
   }
-
+  
   //freq extractor
   if(get_parameter("quanti_extract_freq")->isSet()) {
-
+    
     if(_freqExtractor == NULL) _freqExtractor = new TTQFreqExtractor(this);
-
+    
     Param* param = get_parameter("quanti_freq_logtime");
-
+    
     logtime = (param->isSet() ? (int)param->getValue() : 0);
-
+    
     _freqExtractor->set(true,(logtime != 0),1,logtime,0,get_parameter("quanti_dir")->getArg(),this);
-
+    
     param = get_parameter("quanti_freq_grain");
-
+    
     if( ! param->isSet() ) {
       warning(" parameter \"quanti_freq_grain\" is not set, using 0.1\n");
       _freqExtractor->set_granularity(0.1);
-    } else
+    } else 
       _freqExtractor->set_granularity(param->getValue());
-
+    
     loader->attach(_freqExtractor);
-
+    
   } else if(_freqExtractor != NULL) {
     delete _freqExtractor;
     _freqExtractor = NULL;
   }
   //cout << "\nEnd of TProtoQuanti::loadFileServices!\t";
-
+  
 }
 // ----------------------------------------------------------------------------------------
 // loadStatServices
@@ -1164,7 +1053,7 @@ void TProtoQuanti::loadStatServices  (StatServices* loader)
   //allocate the stat handler
   if(_stats == NULL)
     _stats = new TTQuantiSH(this);
-
+  
   if(_stats != NULL) {
     loader->attach(_stats);
   }
@@ -1179,27 +1068,23 @@ void TProtoQuanti::loadStatServices  (StatServices* loader)
 // operator=
 // ----------------------------------------------------------------------------------------
 TTQuanti& TTQuanti::operator= (const TTrait& T)
-{
+{  
   cout << "\nStart of TTQuanti::operator!\t";
 
   const TTQuanti& TQ = dynamic_cast<const TTQuanti&>(T);
-
+  
   if(this != &TQ) {
-
+    
     _nb_locus = TQ._nb_locus;
     _nb_traits = TQ._nb_traits;
     _seq_length = TQ._seq_length;
-    _nb_trait_pairs = TQ._nb_trait_pairs;
     reset();
     init();
     memcpy(_sequence[0],TQ._sequence[0],_seq_length*sizeof(double));
+    //cout << "memcpy1\n";
     memcpy(_sequence[1],TQ._sequence[1],_seq_length*sizeof(double));
-    memcpy(_pleio_sequence[0],TQ._pleio_sequence[0],_seq_length*sizeof(unsigned char));
-    memcpy(_pleio_sequence[1],TQ._pleio_sequence[1],_seq_length*sizeof(unsigned char));
-    memcpy(_mutcor_sequence[0],TQ._mutcor_sequence[0],_nb_trait_pairs*sizeof(double));
-    memcpy(_mutcor_sequence[1],TQ._mutcor_sequence[1],_nb_trait_pairs*sizeof(double));
+    //cout << "memcpy2\n";
     set_value();
-
   }
   cout << "\nEnd of TTQuanti::operator!\t";
   
@@ -1209,7 +1094,7 @@ TTQuanti& TTQuanti::operator= (const TTrait& T)
 // operator==
 // ----------------------------------------------------------------------------------------
 bool TTQuanti::operator== (const TTrait& T)
-{
+{ 
   if(this->get_type().compare(T.get_type()) != 0) return false;
   
   const TTQuanti& TQ = dynamic_cast<const TTQuanti&>(T);
@@ -1217,7 +1102,6 @@ bool TTQuanti::operator== (const TTrait& T)
   if(this != &TQ) {
     if(_nb_locus != TQ._nb_locus) return false;
     if(_nb_traits != TQ._nb_traits) return false;
-    if(_nb_trait_pairs != TQ._nb_trait_pairs) return false;
   }
   return true;
 }
@@ -1238,51 +1122,42 @@ void TTQuanti::set_init_value             (double* val, unsigned int doInit)
 {
   //cout << "\nStart of TTQuanti::set_init_value(double,int)!\t";
   set_init_value(val);
-
+  
   _doInitMutation = doInit;
-  //cout << "\nEnd of TTQuanti::set_init_value!(double, unsigned int\t";
+  //cout << "\nEnd of TTQuanti::set_init_value!\t";
 
 }
 // ----------------------------------------------------------------------------------------
 // set_init_value
 // ----------------------------------------------------------------------------------------
-void TTQuanti::set_init_value             (double* val)
-{
+void TTQuanti::set_init_value             (double* val) 
+{ 
   //cout << "\nStart of TTQuanti::set_init_value!(double)\t";
   assert(_nb_traits != 0);
-
+  
   if(_init_value) delete [] _init_value;
-
+  
   _init_value = new double [_nb_traits];
-
-  for(unsigned int i = 0; i < _nb_traits; ++i){
+  
+  for(unsigned int i = 0; i < _nb_traits; ++i) 
     _init_value[i] = val[i];
-    //cout << "\tInitTraitValue" << i << ": " << _init_value[i];
-  }
+
   //cout << "\nEnd of TTQuanti::set_init_value!(double)\t";
-}
+}  
 // ----------------------------------------------------------------------------------------
 // init
 // ----------------------------------------------------------------------------------------
 inline void TTQuanti::init ()
 {
-//  cout << "\nStart of TTQuanti::init!\t";
-//  cout << "\nNumber of Trait Pairs: " << _nb_trait_pairs;
+  //cout << "\nStart of TTQuanti::init!\t";
   _sequence = new double*[2];
   _sequence[0] = new double [_seq_length];
   _sequence[1] = new double [_seq_length];
-  _pleio_sequence = new unsigned char*[2];
-  _pleio_sequence[0] = new unsigned char [_seq_length];
-  _pleio_sequence[1] = new unsigned char [_seq_length];
-  _mutcor_sequence = new double*[2];
-  _mutcor_sequence[0] = new double [_nb_trait_pairs];
-  _mutcor_sequence[1] = new double [_nb_trait_pairs];
-
   if(!_phenotypes) _phenotypes = new double [_nb_traits];
-
+  
   if(!_init_value) {
     _init_value = new double [_nb_traits];
-    for(unsigned int i = 0; i < _nb_traits; ++i)
+    for(unsigned int i = 0; i < _nb_traits; ++i) 
       _init_value[i] = _myProto->get_init_value(i);
   }
   //cout << "\nEnd of TTQuanti::init!\t";
@@ -1294,97 +1169,108 @@ inline void TTQuanti::init ()
 inline void TTQuanti::init_sequence ()
 {
 //  cout << "\nStart of TTQuanti::init_sequence!\t\n";
-//  unsigned int _pleio_deg[2];
+  //unsigned int pos;
   vector< vector<unsigned int> > ttable = _myProto->get_trait_table();
-  //vector< vector<unsigned int> > ltable = _myProto->get_locus_table();
-  vector< vector<unsigned int> > ptable = _myProto->get_pleio_table();
-  vector< vector<double> > mut_table = _myProto->get_mut_matrix();
+  vector< vector<unsigned int> > ltable = _myProto->get_locus_table();
+
   //options:
   //0: no variation, init value = (trait value)/(2*_nb_locus)
   //1: init value = (trait value)/(2*_nb_locus) + 1 mutation/locus
   //2: init value = (trait value)/(2*_nb_locus) + 1 mutation/locus+make parts ==> mean trait value doesn't change
   //3: init value = (trait value + random deviate N(0,sdVm))/(2*_nb_locus) + 1 mutation/locus+make parts
-
+  //4: no variation and initialize with opposite effect alleles at alternating loci.
+  
   //decide what initial value to use
-
+  
   //Note: this is kept here as the initial values may have been set individually by LCE_quanti
   //      it wouldn't make sense then to store the init values in the prototype only
+//  double my_init[_nb_traits]; // new for model 4?
 
+//  cout << "\n_doInitMutation:\t" << _doInitMutation << "\n";
+//  cout << "\n_allele_model:\t" << _myProto->_allele_model << "\n";
   if(_doInitMutation == 3) {
-
+    
     double sdVm;
-
+    
     for(unsigned int j = 0; j < _nb_traits; j++) {
       //      sdVm = sqrt(4*_nb_locus*_mut_rate*_myProto->get_trait_var(j)); //trait variance = 2Vm
       sdVm = 0.25;
-      _init_value[j] = (_init_value[j] + RAND::Gaussian(sdVm)) / (2*_nb_locus);
-     // _init_value[j] = (_init_value[j] + RAND::Gaussian(sdVm)) / (2*ttable[j].size());
+//      my_init[j] = (_init_value[j] + RAND::Gaussian(sdVm)) / (2*_nb_locus);
+//      _init_value[j] = (_init_value[j] + RAND::Gaussian(sdVm)) / (2*_nb_locus); // used before model 4 was implemented
+      _init_value[j] = (_init_value[j] + RAND::Gaussian(sdVm)) / (2*ttable[j].size());
     }
-
+    
   } else {
-
+    
     for(unsigned int j = 0; j < _nb_traits; j++){
-//    	_init_value[j] /= (2*_nb_locus);
-    	_init_value[j] /= (2*ttable[j].size()); // divided by the number of loci affecting the trait
-//    	cout << "\tInitAlleleVal" << j << ": " << _init_value[j];
+//    	cout << "\n\t_init_value before: " << _init_value[j];
+//    	my_init[j] = _init_value[j] / (2*_nb_locus);
+//    	_init_value[j] /= (2*_nb_locus); // used before model 4 was implemented
+    	_init_value[j] /= (2*ttable[j].size()); // used before model 4 was implemented
+//    	cout << "\n\t_init_value after: " << _init_value[j];
     }
+    
   }
+  
+  if(_myProto->_allele_model < 3) { //for the di-allelic models
 
-  //set the mutcor allele values from the _mut_matrix
-  unsigned int pos = 0;
-  for(unsigned int i=0; i<_nb_traits; ++i){
-	  for(unsigned int j= i+1; j < _nb_traits; ++j){
-		  _mutcor_sequence[0][pos] = mut_table[i][j] / (sqrt(mut_table[i][i])*sqrt(mut_table[j][j]));
-		  _mutcor_sequence[1][pos] = mut_table[i][j] / (sqrt(mut_table[i][i])*sqrt(mut_table[j][j]));
-		  pos++;
-	  }
-  }
-  //set the pleio allele values from the pleio matrix
-  for(unsigned int i=0; i<ptable.size(); ++i){
-	  for(unsigned int j=0; j<ptable[i].size(); ++j){
-		  if(ptable[i][j]==1){
-			  _pleio_sequence[0][j]='1';
-			  _pleio_sequence[1][j]='1';
-		  } else if(ptable[i][j]==0){
-			  _pleio_sequence[0][j]='0';
-			  _pleio_sequence[1][j]='0';
+    if (_doInitMutation != 4){
+        for(unsigned int i = 0; i < ttable.size(); i++) {
+//            pos = i * _nb_traits;
+            for(unsigned int j = 0; j < ttable[i].size(); j++) {
+                _sequence[0][ttable[i][j]] = _myProto->_allele_value[i][0]; //set with the positive allele value
+                _sequence[1][ttable[i][j]] = _myProto->_allele_value[i][0];
+//                pos++;
+            }
+        }
+
+    } else {
+        //this is intended for a diallelic model with no initial variance
+//    	cout << "Diallelic polarized condition" << endl;
+        for(unsigned int i = 0; i < ttable.size(); i++) {
+//            pos = i * _nb_traits;
+            for(unsigned int j = 0; j < ttable[i].size(); j++) {
+                if (j % 2 == 0){
+                    _sequence[0][ttable[i][j]] = _myProto->_allele_value[i][0]; //set with the positive allele value
+                    _sequence[1][ttable[i][j]] = _myProto->_allele_value[i][0]*-1;
+//                    pos++;
+                } else {
+                    _sequence[0][ttable[i][j]] = _myProto->_allele_value[i][0]*-1; //set with the negative allele value
+                    _sequence[1][ttable[i][j]] = _myProto->_allele_value[i][0];
+//                    pos++;
+                }
+            }
+        }
+        cout << "\t after init_sequence  _doInitMutation=4 (Polarize)\n";
+        for(unsigned int i=0; i<2; ++i){
+          for(unsigned int j=0; j<_seq_length; ++j){
+        	  cout << _sequence[i][j] << " | ";
+          }
+          cout << endl;
+        }
+        cout << endl;
+
+    }
+  } else {
+	  /////////////////////////////////////////////////////////////////
+  //set the allele values from the trait value
+  //if(get_parameter("quanti_pleio_matrix")->isSet()){
+	  for(unsigned int i=0; i<ttable.size(); ++i){
+		  double myinit = (_init_value[i] * _nb_locus * 2) / (2* ttable[i].size());
+		  for(unsigned int j=0; j<ttable[i].size(); ++j){
+			  //cout << "\t_init_value after after: " << myinit << endl;
+			  _sequence[0][ttable[i][j]]=myinit;
+			  _sequence[1][ttable[i][j]]=myinit;
 		  }
 	  }
   }
-  //print out _pleio_sequence (for debugging purposes only
-//  for(unsigned int i=0; i<2; ++i){
-//	  cout << endl;
-//	  for(unsigned int j=0; j<_seq_length; ++j){
-//		  cout << _pleio_sequence[i][j] << " | ";
-//	  }
-//  }
-  //set the allele values from the trait value using the pleio sequence to determine location
-//  for(unsigned int i=0; i<ttable.size(); ++i){
-  for(unsigned int i=0; i<_nb_locus; ++i){
-//	  double myinit = (_init_value[i] * _nb_locus * 2) / (2* ttable[i].size());
-      pos = i * _nb_traits;
-//	  for(unsigned int j=0; j<ttable[i].size(); ++j){
-	  for(unsigned int j=0; j<_nb_traits; ++j){
-		  if(ptable[0][pos]==1){
-			  _sequence[0][pos]=_init_value[j];
-		  } else{_sequence[0][pos]=0;}
-		  if(ptable[1][pos]==1){
-			  _sequence[1][pos]=_init_value[j];
-		  } else{_sequence[1][pos]=0;}
-//		  _sequence[0][ttable[i][j]]=myinit;
-//		  _sequence[1][ttable[i][j]]=myinit;
-		  pos++;
-	  }
-  }
-
-  //print out _sequence (for debugging purposes only)
-//  cout << endl;
-//  for(unsigned int i=0; i<2; ++i){
+  //print out _sequence (for debugging purposes only
+// for(unsigned int i=0; i<2; ++i){
 //	  for(unsigned int j=0; j<_seq_length; ++j){
 //		  cout << _sequence[i][j] << " | ";
 //	  }
 //	  cout << endl;
-//  } // before init mutations
+//  }
 
   // OLD _sequence builder
 /*  for(unsigned int i = 0; i < _nb_locus; i++) {
@@ -1395,105 +1281,92 @@ inline void TTQuanti::init_sequence ()
       pos++;
     }
   }*/
-
+  
   //add random effects to allele values
-  if(_doInitMutation != 0) {
-
+  if(_doInitMutation != 0 && _doInitMutation !=4) {
     double *mut1, *mut2;
     unsigned int L;
-
-
+    
     for(unsigned int i = 0; i < _nb_locus; i++) {
+      
+    //  pos = i * _nb_traits;
+      
+      mut1 = _myProto->getMutationEffects(i);
+      mut2 = _myProto->getMutationEffects(i);
 
-      pos = i * _nb_traits;
-//	  _pleio_deg[0] = ptable[0][sum(pos+i];  // only add mutations to positions that affect a trait
-//	  _pleio_deg[1] = ptable[0][sum(pos+i];
-//      mut1 = _myProto->getMutationEffects();
-//      mut2 = _myProto->getMutationEffects();
-      mut1 = (_myProto->*_getMutationValues)(i);
-      mut2 = (_myProto->*_getMutationValues)(i);
-      for(unsigned int j = 0; j < _nb_traits; j++) {
-        _sequence[0][pos] += mut1[j];
-        _sequence[1][pos] += mut2[j];
-        pos++;
-      }
-/*      for(unsigned int j=0; j<ltable[i][1]; j++){
-    	 //cout << "\tmut1:" << i << ": " << mut1[j] << endl;
-         _sequence[0][(ltable[i][0])+j] += mut1[j];
-         _sequence[1][(ltable[i][0])+j] += mut2[j];
-      }*/
+      if(_myProto->_allele_model < 3) {
 
-      //TODO add initial mutations to _pleio_sequence and _mutcor_sequence?
+    	  for(unsigned int j=0; j<ltable[i][1]; j++){
+        	 //cout << "\tmut1:" << i << ": " << mut1[j] << endl;
+             _sequence[0][(ltable[i][0])+j] = mut1[j];
+             _sequence[1][(ltable[i][0])+j] = mut2[j];
+          }
 
-      if(_doInitMutation > 1) { // the make-parts algorithm
+      } else {
 
-        //select a random locus
-        do{
-          L = RAND::Uniform(_nb_locus);
-        }while(L == i);
 
-        //subtract the previous random deviates from that locus
-//        for(unsigned int j=0; j<ltable[L][1]; j++){
-//        	//cout << "\tunmut1: " << L << ":" << mut1[j] << endl;
-//        	_sequence[0][(ltable[L][0])+j] -= mut1[j];
-//            _sequence[1][(ltable[L][0])+j] -= mut2[j];
-//        }
+      	  for(unsigned int j=0; j<ltable[i][1]; j++){
+      		  //cout << "\tmut1:" << i << ": " << mut1[j] << endl;
+      		  _sequence[0][(ltable[i][0])+j] += mut1[j];
+      		  _sequence[1][(ltable[i][0])+j] += mut2[j];
+      	  }
 
-        pos = L * _nb_traits;
-        // OLD subtract the previous random deviates from that locus
-        for(unsigned int j = 0; j < _nb_traits; j++) {
-          _sequence[0][pos] -= mut1[j];
-          _sequence[1][pos] -= mut2[j];
-          pos++;
-        }
+      	  /* Old mut effects
+      	  for(unsigned int j = 0; j < _nb_traits; j++) {
+        	_sequence[0][pos] += mut1[j];
+        	_sequence[1][pos] += mut2[j];
+        	pos++;
+      	  } */
+      
+      	  if(_doInitMutation > 1) { // the make-parts algorithm
+        
+      		  //select a random locus
+      		  do{
+      			  L = RAND::Uniform(_nb_locus);
+      		  }while(L == i);
+        
+      		  //subtract the previous random deviates from that locus
+      		  for(unsigned int j=0; j<ltable[L][1]; j++){
+      			  //cout << "\tunmut1: " << L << ":" << mut1[j] << endl;
+      			  _sequence[0][(ltable[L][0])+j] -= mut1[j]; //TODO update to add correct effects to correct part of _sequence
+      			  _sequence[1][(ltable[L][0])+j] -= mut2[j];
+      		  }
+
+      		  /*        pos = L * _nb_traits;
+        	// OLD subtract the previous random deviates from that locus
+        	for(unsigned int j = 0; j < _nb_traits; j++) {
+          	  _sequence[0][pos] -= mut1[j];
+          	  _sequence[1][pos] -= mut2[j];
+          	  pos++;
+        	}*/
+          }
       }
     }
-//    cout << endl;
-//    for(unsigned int i=0; i<2; ++i){
-//  	  for(unsigned int j=0; j<_seq_length; ++j){
-//  		  cout << _sequence[i][j] << " | ";
+  } 
+//  cout << "\t after init_sequence  _doInitMutation \n";
+//  for(unsigned int i=0; i<2; ++i){
+//	  for(unsigned int j=0; j<_seq_length; ++j){
+//		  cout << _sequence[i][j] << " | ";
 //  	  }
 //  	  cout << endl;
-//    } // after init mutations
-
-  }
-/*  cout << "\t after init_sequence  _doInitMutation \n";
-  for(unsigned int i=0; i<2; ++i){
-	  for(unsigned int j=0; j<_seq_length; ++j){
-		  cout << _sequence[i][j] << " | ";
-  	  }
-  	  cout << endl;
-  }
-  cout << endl;*/
-  //cout << "\nEnd of TTQuanti::init_sequence!\t\n";
+//  }
+//  cout << endl;
+//  cout << "\nEnd of TTQuanti::init_sequence!\t\n";
 }
 // ----------------------------------------------------------------------------------------
 // reset
 // ----------------------------------------------------------------------------------------
 inline void TTQuanti::reset ()
 {
-//  cout << "\nStart of TTQuanti::reset!\t\n";
   if(_sequence != NULL) {
-    delete [] _sequence[0];
+    delete [] _sequence[0]; 
     delete [] _sequence[1];
-    delete [] _sequence;
+    delete [] _sequence; 
     _sequence = NULL;
-  }
-  if(_pleio_sequence != NULL) {
-    delete [] _pleio_sequence[0];
-    delete [] _pleio_sequence[1];
-    delete [] _pleio_sequence;
-    _pleio_sequence = NULL;
-  }
-  if(_mutcor_sequence != NULL) {
-    delete [] _mutcor_sequence[0];
-    delete [] _mutcor_sequence[1];
-    delete [] _mutcor_sequence;
-    _mutcor_sequence = NULL;
   }
   if(_phenotypes != NULL) delete [] _phenotypes;
   _phenotypes = NULL;
-
+  
   if(_init_value) delete [] _init_value;
   _init_value = NULL;
 }
@@ -1503,97 +1376,30 @@ inline void TTQuanti::reset ()
 inline void TTQuanti::inherit (TTrait* mother, TTrait* father)
 {
 
-  //cout << "\nStart of TTQuanti::inherit!\t";
-//  cout << " Before sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//    for(unsigned int j=0; j<_seq_length; ++j){
-//	  cout << _sequence[i][j] << " | ";
-//	}
-//	cout << endl;
-//  }
-//  cout << " Before pleio sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//    for(unsigned int j=0; j<_seq_length; ++j){
-//	  cout << _pleio_sequence[i][j] << " | ";
-//	}
-//	cout << endl;
-//  }
-//  cout << " Before mut_cor sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//    for(unsigned int j=0; j<_nb_trait_pairs; ++j){
-//	  cout << _mutcor_sequence[i][j] << " | ";
-//	}
-//	cout << endl;
-//  }
+ // cout << "\nStart of TTQuanti::inherit!\t";
+/*  cout << " Before sequence: \n";
+  for(unsigned int i=0; i<2; ++i){
+    for(unsigned int j=0; j<_seq_length; ++j){
+	  cout << _sequence[i][j] << " | ";
+	}
+	cout << endl;
+  }*/
 
   double** mother_seq = (double**)mother->get_sequence();
   double** father_seq = (double**)father->get_sequence();
-  TTQuanti *trait_mother = dynamic_cast<TTQuanti*> (mother);  // since get_pleio_sequence only belongs to TTQuanti we need cast the trait pointer as such
-  TTQuanti *trait_father = dynamic_cast<TTQuanti*> (father);
-  unsigned char** mother_pleio_seq = trait_mother->get_pleio_sequence();
-  unsigned char** father_pleio_seq = trait_father->get_pleio_sequence();
-  double** mother_mutcor_seq = trait_mother->get_mutcor_sequence();
-  double** father_mutcor_seq = trait_father->get_mutcor_sequence();
+  
+  (_myProto->* _inherit) (FEM, _sequence[FEM], mother_seq);
+  
+  (_myProto->* _inherit) (MAL, _sequence[MAL], father_seq);
 
-//  cout << "\nBefore father pleio sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//    for(unsigned int j=0; j<_seq_length; ++j){
-//	  cout << father_pleio_seq[i][j] << " | ";
-//	}
-//  cout << endl;
-//  }
-//
-//  cout << "\nBefore mother pleio sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//    for(unsigned int j=0; j<_seq_length; ++j){
-//	  cout << mother_pleio_seq[i][j] << " | ";
-//	}
-//  cout << endl;
-//  }
-
-//  cout << "\nBefore father mut_cor sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//    for(unsigned int j=0; j<_nb_trait_pairs; ++j){
-//	  cout << father_mutcor_seq[i][j] << " | ";
-//	}
-//	cout << endl;
-//  }
-//
-//  cout << "\nBefore mother mut_cor sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//    for(unsigned int j=0; j<_nb_trait_pairs; ++j){
-//	  cout << mother_mutcor_seq[i][j] << " | ";
-//	}
-//	cout << endl;
-//  }
-
-  (_myProto->* _inherit) (FEM, _sequence[FEM], _pleio_sequence[FEM], _mutcor_sequence[FEM], mother_seq, mother_pleio_seq, mother_mutcor_seq);
-
-  (_myProto->* _inherit) (MAL, _sequence[MAL], _pleio_sequence[MAL], _mutcor_sequence[MAL], father_seq, father_pleio_seq, father_mutcor_seq);
-
-//  cout << " Child sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//    for(unsigned int j=0; j<_seq_length; ++j){
-//	  cout << _sequence[i][j] << " | ";
-//	}
-//	cout << endl;
-//  }
-//  cout << "\nChild pleio sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//    for(unsigned int j=0; j<_seq_length; ++j){
-//	  cout << _pleio_sequence[i][j] << " | ";
-//	}
-//	cout << endl;
-//  }
-//  cout << "\nChild mut_cor sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//    for(unsigned int j=0; j<_nb_trait_pairs; ++j){
-//	  cout << _mutcor_sequence[i][j] << " | ";
-//	}
-//	cout << endl;
-//  }
-
-  //cout << "\nEnd of TTQuanti::inherit!\t";
+/*  cout << " After sequence: \n";
+  for(unsigned int i=0; i<2; ++i){
+    for(unsigned int j=0; j<_seq_length; ++j){
+	  cout << _sequence[i][j] << " | ";
+	}
+	cout << endl;
+  }*/
+ // cout << "\nEnd of TTQuanti::inherit!\t";
  }
 // ----------------------------------------------------------------------------------------
 // mutate_noHC
@@ -1609,117 +1415,59 @@ inline void TTQuanti::mutate_noHC ()
 	  cout << endl;
   }
   cout << endl;*/
-//  cout << "\n Before mutate_noHC pleio sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//	  for(unsigned int j=0; j<_seq_length; ++j){
-//		  cout << _pleio_sequence[i][j] << " | ";
-//	  }
-//	  cout << endl;
-//  }
-//  cout << "\n Before mutate_noHC mutcor sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//	  for(unsigned int j=0; j<_nb_trait_pairs; ++j){
-//		  cout << _mutcor_sequence[i][j] << " | ";
-//	  }
-//	  cout << endl;
-//  }
 
   //unsigned int NbMut = 1;
-  unsigned int NbMut = (unsigned int)RAND::Poisson(_genomic_mutation_rate);
-  unsigned int NbMut_Cor = (unsigned int)RAND::Poisson(_mutcor_mutation_rate);
-  unsigned int NbMut_Pleio = (unsigned int)RAND::Poisson(_pleio_mutation_rate);
-// Get number of mutations for pleio_sequence and mut_cor with their own mutation rates
-  unsigned int mut_locus, mut_all, pos;
-  double* effects;
-//  vector< vector<unsigned int> > ltable = _myProto->get_locus_table();
+  vector< vector<unsigned int> > ltable = _myProto->get_locus_table();
+//  unsigned int NbMut = (unsigned int)RAND::Poisson(_genomic_mutation_rate);
+  unsigned int NbMut = (unsigned int)RAND::Binomial(_genomic_mutation_rate/2/_nb_locus, _nb_locus*ltable[0][1]); // Binomial takes per-locus mutation rate and genome size (N.B. Here we have assumed that all loci have the same pleiotropic degree as locus 1)
+  unsigned int mut_locus, mut_all;// pos;
+  double *effects;
 
-  // Mutation loop for _mutcor_sequence
-  if(NbMut_Cor > 0){
-  	while(NbMut_Cor !=0) {
-  	  unsigned int mut_traitCombo = RAND::Uniform(_nb_trait_pairs);
-  	  mut_all = RAND::RandBool();
-  	  double effects_cor = -0.2 * log(1 - RAND::Uniform()); //Used in TTDispersal::mutate ());
-      if(RAND::RandBool())
-    	_mutcor_sequence[mut_all][mut_traitCombo] = ((_mutcor_sequence[mut_all][mut_traitCombo] + effects_cor) >= 1.0 ? 1.0 : _mutcor_sequence[mut_all][mut_traitCombo] + effects_cor);
-      else
-    	_mutcor_sequence[mut_all][mut_traitCombo] = ((_mutcor_sequence[mut_all][mut_traitCombo] - effects_cor) <= -1.0 ? -1.0 : _mutcor_sequence[mut_all][mut_traitCombo] - effects_cor);
-  	  NbMut_Cor--;
-  	}
+  while(NbMut != 0) {
+      mut_locus = RAND::Uniform(_nb_locus);
+      effects = _myProto->getMutationEffects(mut_locus);
+      mut_all = RAND::RandBool();
+      for(unsigned int i=0; i<ltable[mut_locus][1]; i++){
+        _sequence[mut_all][(ltable[mut_locus][0])+i] += effects[i];///mutations are added to existing alleles
+      }
+      NbMut--;
   }
-  // Mutation loop for _pleio_sequence
-  while(NbMut_Pleio != 0) {
+
+/*  cout << "Locus Mutation Effects: \n";
+  for(unsigned int i=0; i<_nb_locus; i++){
+	  effects = (_myProto->*_getMutationValues)(i);
+	  cout << "\tEffects for Locus " << i << ": ";
+	  for(unsigned int j=0; j<_nb_traits; j++){
+		  cout << effects[j] << " | ";
+	  }
+	  cout << endl;
+  }
+  cout << endl;*/
+
+
+  // OLD Mutation loop noHC
+/*  while(NbMut != 0) {
+    mut_locus = RAND::Uniform(_nb_locus);
+    effects = (_myProto->*_getMutationValues)(mut_locus);
     mut_all = RAND::RandBool();
-    pos = RAND::Uniform(_seq_length);
-    //cout << "\nPleio allele before mutation: " << _pleio_sequence[mut_all][pos];
-    if(_pleio_sequence[mut_all][pos] == '0') { _pleio_sequence[mut_all][pos] = '1';}
-    else if(_pleio_sequence[mut_all][pos] == '1') { _pleio_sequence[mut_all][pos] = '0';}
-    //cout << "\nPleio allele after mutation: " << _pleio_sequence[mut_all][pos];
-    NbMut_Pleio--;
-  }
+    pos = mut_locus*_nb_traits;
+    for(unsigned int i = 0; i < _nb_traits; i++)
+      _sequence[mut_all][pos + i] += effects[i];///mutations are added to existing alleles
+    
+    NbMut--; 
+  }*/
 
-  if(NbMut > 0){ // update mutation effects with current _mutcor_sequence
-	  _myProto->getContinuousMutationModel(_mutcor_sequence); // get M-matrix for mutation loop below with average of two alleles for each mut_cor
-  // Mutation loop for _sequence
-    while(NbMut != 0) {
-//    mut_locus = 0;
-	  mut_locus = RAND::Uniform(_nb_locus);
-	  mut_all = RAND::RandBool();
-	  effects = (_myProto->getMutationEffects)(mut_locus); // per locus effect
-//	  effects = (_myProto->*_getMutationValues)(mut_locus);
-	  pos = mut_locus*_nb_traits;
-	  for(unsigned int i = 0; i < _nb_traits; i++)
-		  _sequence[mut_all][pos + i] += effects[i];///mutations are added to existing alleles
-	  NbMut--;
-	}
-  }
-
-   //  while(NbMut != 0) {				// for variable pleiotropy
-   //      mut_locus = RAND::Uniform(_nb_locus);
-   //      effects = _myProto->getMutationEffects(mut_locus);
-   //      mut_all = RAND::RandBool();
-   //      for(unsigned int i=0; i<ltable[mut_locus][1]; i++){
-   //        _sequence[mut_all][(ltable[mut_locus][0])+i] += effects[i];///mutations are added to existing alleles
-   //      }
-   //      NbMut--;
-   //  }
-
-   /*  cout << "Locus Mutation Effects: \n";
-    for(unsigned int i=0; i<_nb_locus; i++){
-  	  effects = (_myProto->*_getMutationValues)(i);
-  	  cout << "\tEffects for Locus " << i << ": ";
-  	  for(unsigned int j=0; j<_nb_traits; j++){
-  		  cout << effects[j] << " | ";
-  	  }
-  	  cout << endl;
-    }
-    cout << endl;*/
-
-  //cout << "mutate_noHC Sequence table: " << ltable.size() << endl;
+  //cout << "mutate_noHC Locus table: " << ltable.size() << endl;
   //print out _sequence (for debugging purposes only
-//  cout << "\t mutate_noHC After sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//	  for(unsigned int j=0; j<_seq_length; ++j){
-//		  cout << _sequence[i][j] << " | ";
-//	  }
-//	  cout << endl;
-//  }
-//  cout << endl;
-//  cout << "\n After mutate_noHC pleio sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//	  for(unsigned int j=0; j<_seq_length; ++j){
-//		  cout << _pleio_sequence[i][j] << " | ";
-//	  }
-//	  cout << endl;
-//  }
-//  cout << "\n After mutate_noHC mutcor sequence: \n";
-//  for(unsigned int i=0; i<2; ++i){
-//	  for(unsigned int j=0; j<_nb_trait_pairs; ++j){
-//		  cout << _mutcor_sequence[i][j] << " | ";
-//	  }
-//	  cout << endl;
-//  }
-//
-//  cout << "\tEnd of TTQuanti::mutate_noHC!\n";
+  /*cout << "\t mutate_noHC After sequence: \n";
+  for(unsigned int i=0; i<2; ++i){
+	  for(unsigned int j=0; j<_seq_length; ++j){
+		  cout << _sequence[i][j] << " | ";
+	  }
+	  cout << endl;
+  }
+  cout << endl;*/
+  //cout << "\tEnd of TTQuanti::mutate_noHC!\n";
 
 }
 // ----------------------------------------------------------------------------------------
@@ -1727,53 +1475,53 @@ inline void TTQuanti::mutate_noHC ()
 // ----------------------------------------------------------------------------------------
 inline void TTQuanti::mutate_HC ()
 {
-  unsigned int NbMut = (unsigned int)RAND::Poisson(_genomic_mutation_rate);
-  unsigned int NbMut_Cor = (unsigned int)RAND::Poisson(_genomic_mutation_rate);
-  unsigned int NbMut_Pleio = (unsigned int)RAND::Poisson(_genomic_mutation_rate);
-  unsigned int mut_locus, mut_all, pos;
-  double* effects;
+  vector< vector<unsigned int> > ltable = _myProto->get_locus_table();
 
-  // Mutation loop for _mutcor_sequence
-  if(NbMut_Cor > 0){
-  	while(NbMut_Cor !=0) {
-	  unsigned int mut_traitCombo = RAND::Uniform(_nb_trait_pairs);
-  	  mut_all = RAND::RandBool();
-  	  double effects_cor = 0.25;//RAND::Rand( Whatever is used in TTDispersal::mutate ());
-  	  if(effects_cor >= 1.0){
-  		_mutcor_sequence[mut_all][mut_traitCombo] = 1.0;
-  	  } else if(effects_cor <= -1.0){
-  		_mutcor_sequence[mut_all][mut_traitCombo] = -1.0;
-  	  } else {_mutcor_sequence[mut_all][mut_traitCombo] = effects_cor; }
-  	  NbMut_Cor--;
-  	}
-  }
+//  cout << "\t mutate_HC Before sequence: \n";
+//  for(unsigned int i=0; i<2; ++i){
+//	  for(unsigned int j=0; j<_seq_length; ++j){
+//		  cout << _sequence[i][j] << " | ";
+//	  }
+//	  cout << endl;
+//  }
+//  cout << endl;
 
-  // Mutation loop for _pleio_sequence
-  while(NbMut_Pleio != 0) {
-    mut_all = RAND::RandBool();
-    pos = RAND::Uniform(_seq_length);
-    //cout << "\nPleio allele before mutation: " << _pleio_sequence[mut_all][pos];
-    if(_pleio_sequence[mut_all][pos] == '0') { _pleio_sequence[mut_all][pos] = '1';}
-    else if(_pleio_sequence[mut_all][pos] == '1') { _pleio_sequence[mut_all][pos] = '0';}
-    //cout << "\nPleio allele after mutation: " << _pleio_sequence[mut_all][pos];
-    NbMut_Pleio--;
-  }
 
-  if(NbMut > 0){  // Update mutation effects with current _mutcor_sequence
-	  _myProto->getContinuousMutationModel(_mutcor_sequence); // get M-matrix for mutation loop below with average of two alleles for each mut_cor
-  // Mutation loop for _sequence
-    while(NbMut != 0) {
-//    mut_locus = 0;
+//  unsigned int NbMut = (unsigned int)RAND::Poisson(_genomic_mutation_rate); // instead use binomial as done neutral traits
+  unsigned int NbMut = (unsigned int)RAND::Binomial(_genomic_mutation_rate/2/_nb_locus, _nb_locus*ltable[0][1]); // Binomial takes per-locus mutation rate and genome size (N.B. Here we have assumed that all loci have the same pleiotropic degree as locus 1)
+  unsigned int mut_locus, mut_all;//, pos;
+  double *effects;
+//  cout << "\nNumber of Mutations: " << NbMut << endl;
+  while(NbMut != 0) {
       mut_locus = RAND::Uniform(_nb_locus);
+      effects = _myProto->getMutationEffects(mut_locus);
       mut_all = RAND::RandBool();
-//      effects = _myProto->getMutationEffects(); // per locus effect
-	  effects = (_myProto->*_getMutationValues)(mut_locus);
-      pos = mut_locus*_nb_traits;
-      for(unsigned int i = 0; i < _nb_traits; i++)
-        _sequence[mut_all][pos + i] = effects[i];///mutations are added to existing alleles
+      for(unsigned int i=0; i<ltable[mut_locus][1]; i++){
+        _sequence[mut_all][(ltable[mut_locus][0])+i] = effects[i];///mutations replace existing alleles
+      }
       NbMut--;
-    }
   }
+
+  // OLD Mutation loop HC
+/*  while(NbMut != 0) {
+    mut_locus = RAND::Uniform(_nb_locus);
+    effects = _myProto->getMutationEffects(mut_locus);
+    mut_all = RAND::RandBool();
+    pos = mut_locus*_nb_traits;
+    for(unsigned int i = 0; i < _nb_traits; i++)
+      _sequence[mut_all][pos + i] = effects[i]; ///mutations replace existing alleles
+    
+    NbMut--; 
+  }*/
+
+//  cout << "\t mutate_HC After sequence: \n";
+//  for(unsigned int i=0; i<2; ++i){
+//	  for(unsigned int j=0; j<_seq_length; ++j){
+//		  cout << _sequence[i][j] << " | ";
+//	  }
+//	  cout << endl;
+//  }
+//  cout << endl;
 
 } 
 // ----------------------------------------------------------------------------------------
@@ -1783,18 +1531,18 @@ inline void TTQuanti::set_value ()
 {
   //cout << "\nStart of TTQuanti::set_value!\t";
 
-  register unsigned int loc;
-  // vector< vector<unsigned int> > ttable = _myProto->get_trait_table();
+  //register unsigned int loc;
+  vector< vector<unsigned int> > ttable = _myProto->get_trait_table();
   // vector< vector<unsigned int> > ltable = _myProto->get_locus_table();
-  vector< vector<unsigned int> > ptable = _myProto->get_pleio_table();
 
-/*  // print _sequence and ttable for debugging purposes
-  for(unsigned int i=0; i<2; ++i){
- 	  for(unsigned int j=0; j<_seq_length; ++j){
- 		  cout << _sequence[i][j] << " | ";
- 	  }
- 	  cout << endl;
-  }*/
+  // print _sequence and ttable for debugging purposes
+//  for(unsigned int i=0; i<2; ++i){
+// 	  for(unsigned int j=0; j<_seq_length; ++j){
+// 		  cout << _sequence[i][j] << " | ";
+// 	  }
+// 	  cout << endl;
+//  }
+//  cout << endl;
 /*  cout << "\nttable: ";
   for(unsigned int i=0; i<ttable.size(); ++i){
 	  for(unsigned j=0; j<ttable[i].size(); ++j){
@@ -1807,24 +1555,13 @@ inline void TTQuanti::set_value ()
   for(unsigned int i = 0; i < _nb_traits; ++i) 
     _phenotypes[i] = 0;
   
-  for(unsigned int j = 0; j < _nb_locus; ++j) {
-	  loc = j * _nb_traits;
-	  for(unsigned int i = 0; i < _nb_traits; ++i) {
-    	if(ptable[0][loc]==1){
-    	  _phenotypes[i] += _sequence[0][loc];
-    	}
-       	if(ptable[1][loc]==1){
-          _phenotypes[i] += _sequence[1][loc];
-       	}
-       	loc++;
+  for(unsigned int j = 0; j < ttable.size(); ++j) {
+      for(unsigned int i = 0; i < ttable[j].size(); ++i) {
+        _phenotypes[j] += (_sequence[0][ttable[j][i]] + _sequence[1][ttable[j][i]]);
+        if(abs(_phenotypes[j]) < 0.0000000001){_phenotypes[j]=0;} // min_tolerance checks in all cases where floating point addition of doubles is used
+//        cout << "Added sequence[ttable pos]: " << j << "|" << i << ". Values: " << _sequence[0][ttable[j][i]] << "|" << _sequence[1][ttable[j][i]] << ". New Phenotype: " << _phenotypes[j] << endl;
       }
   }
-
-/*  for(unsigned int j = 0; j < ttable.size(); ++j) {
-      for(unsigned int i = 0; i < ttable[j].size(); ++i) {
-        _phenotypes[j] += _sequence[0][ttable[j][i]] + _sequence[1][ttable[j][i]];
-      }
-  }*/
 
   //print out values
 //  for(unsigned int i = 0; i < _nb_traits; ++i)
@@ -1844,7 +1581,7 @@ inline void TTQuanti::set_value ()
     for(unsigned int i = 0; i < _nb_traits; ++i) 
       _phenotypes[i] += RAND::Gaussian(_eVariance);
 
-  //cout << "\tEnd of TTQuanti::set_value!\n";
+ // cout << "\tEnd of TTQuanti::set_value!\n";
 }
 
 // ----------------------------------------------------------------------------------------
@@ -1852,46 +1589,23 @@ inline void TTQuanti::set_value ()
 // ----------------------------------------------------------------------------------------
 double TTQuanti::get_genotype (unsigned int trait)
 {
-  unsigned int loc;
+  //unsigned int loc;
   double genotype = 0;
-//  vector< vector<unsigned int> > ttable = _myProto->get_trait_table();
-  vector< vector<unsigned int> > ptable = _myProto->get_pleio_table();
+  vector< vector<unsigned int> > ttable = _myProto->get_trait_table();
   
-// OLD genotype calculator
-//  for(unsigned int i = 0; i < ttable[trait].size(); ++i) {
-//	  genotype += _sequence[0][ttable[trait][i]] + _sequence[1][ttable[trait][i]];
-//  }
-
-  for(unsigned int j = 0; j < _nb_locus; ++j) {
-    loc = j * _nb_traits + trait;
-//	if(ptable[0][loc]==1){		genotype += _sequence[0][loc]; }
-//   	if(ptable[1][loc]==1){ 		genotype += _sequence[1][loc]; }
-    genotype += _sequence[0][loc] + _sequence[1][loc]; // TODO decide how best to output genotypes for each allele separately since not every allele effects phenotype
+  for(unsigned int i = 0; i < ttable[trait].size(); ++i) {
+	  genotype += _sequence[0][ttable[trait][i]] + _sequence[1][ttable[trait][i]];
+      if(abs(genotype) < 0.0000000001){genotype=0;} // min_tolerance checks in all cases where floating point addition of doubles is used
   }
+//  cout << "get_genotype Trait" << trait << ": "<< genotype << endl;
+
+  // OLD genotype calculator
+/*  for(unsigned int j = 0; j < _nb_locus; ++j) {
+    loc = j * _nb_traits + trait;
+    genotype += _sequence[0][loc] + _sequence[1][loc];
+  } */
+
   return genotype;
-}
-// ----------------------------------------------------------------------------------------
-// get_mutcor_genotype
-// ----------------------------------------------------------------------------------------
-double TTQuanti::get_mutcor_genotype (unsigned int trait_pair)
-{
-  double mutcor_genotype = 0;
-  mutcor_genotype = (_mutcor_sequence[0][trait_pair] + _mutcor_sequence[1][trait_pair])/2;
-  return mutcor_genotype;
-}
-// ----------------------------------------------------------------------------------------
-// get_pleio_genotype
-// ----------------------------------------------------------------------------------------
-double TTQuanti::get_pleio_genotype (unsigned int pos)
-{
-  double pleio_genotype = 0;
-//  stringstream stst1, stst2;
-//  stst1 << _pleio_sequence[0][seq_length];   stst2 << _pleio_sequence[1][seq_length];
-//  ((stst1+stst2/2)) >> pleio_genotype;
-//  cout << "\tpleio seq: " << pleio_genotype;
-  //cout << "\tpleio seq: " << (((double)(_pleio_sequence[0][pos])-48)+((double)(_pleio_sequence[1][pos])-48))/2;
-  pleio_genotype = (((double)(_pleio_sequence[0][pos])-48)+((double)(_pleio_sequence[1][pos])-48))/2;
-  return pleio_genotype;
 }
 // ----------------------------------------------------------------------------------------
 // show_up
@@ -1935,7 +1649,6 @@ void TTQuanti::show_up  ()
 // ----------------------------------------------------------------------------------------
 void TTQuantiSH::resetPtrs ( )
 {  
-//  cout << "\nStart of TTQuantiSH::resetPtrs!\t";
   
   if(_G != NULL) gsl_matrix_free(_G);
   if(_eval != NULL) gsl_vector_free(_eval);
@@ -1949,8 +1662,6 @@ void TTQuantiSH::resetPtrs ( )
   if(_Vp != NULL) delete [] _Vp;
   if(_covar != NULL) delete [] _covar;
   if(_eigval != NULL) delete [] _eigval;
-  if(_mean_mutcor != NULL) delete [] _mean_mutcor;
-  if(_mean_pleio != NULL) delete [] _mean_pleio;
   
   
   if(_eigvect) {
@@ -1987,16 +1698,7 @@ void TTQuantiSH::resetPtrs ( )
     for(unsigned int i = 0; i < _patchNbr; i++) delete [] _peigvect[i];
     delete []  _peigvect;
   }
-
-  if(_pmean_mutcor != NULL) {
-    for(unsigned int i = 0; i < _patchNbr; i++) delete [] _pmean_mutcor[i];
-    delete [] _pmean_mutcor;
-  }
-
-  if(_pmean_pleio != NULL) {
-    for(unsigned int i = 0; i < _patchNbr; i++) delete [] _pmean_pleio[i];
-    delete [] _pmean_pleio;
-  }
+  
 }
 // ----------------------------------------------------------------------------------------
 // init
@@ -2017,9 +1719,6 @@ void TTQuantiSH::init()
   if(_nb_trait != _SHLinkedTrait->get_nb_traits())
     _nb_trait = _SHLinkedTrait->get_nb_traits();
   
-  if(_nb_locus != _SHLinkedTrait->get_nb_locus())
-    _nb_locus = _SHLinkedTrait->get_nb_locus();
-
   _G = gsl_matrix_alloc(_nb_trait,_nb_trait);
   _eval = gsl_vector_alloc (_nb_trait);
   _evec = gsl_matrix_alloc (_nb_trait, _nb_trait);
@@ -2059,19 +1758,12 @@ void TTQuantiSH::init()
   if(_nb_trait > 1) {
     
     _covar = new double [_nb_trait*(_nb_trait -1)/2];
-    _mean_mutcor = new double [_nb_trait*(_nb_trait -1)/2];
+    
     _pcovar = new double* [_patchNbr];
-    _pmean_mutcor = new double* [_patchNbr];
-    _pmean_pleio = new double* [_patchNbr];
-
-    for(unsigned int i = 0; i < _patchNbr; i++)
-      _pcovar[i] = new double [_nb_trait*(_nb_trait - 1)/2];
 
     for(unsigned int i = 0; i < _patchNbr; i++) 
-      _pmean_mutcor[i] = new double [_nb_trait*(_nb_trait - 1)/2];
-
-    for(unsigned int i = 0; i < _patchNbr; i++)
-      _pmean_pleio[i] = new double [_nb_trait*_nb_locus];
+      _pcovar[i] = new double [_nb_trait*(_nb_trait - 1)/2];
+    
   }
   //cout << "\nEnd of TTQuantiSH::init!\t";
   
@@ -2131,10 +1823,6 @@ bool TTQuantiSH::setStatRecorders(std::string& token)
     addEigenVect1PerPatch(AGE);
   } else if(sub_token == "quanti.skew.patch") {
     addSkewPerPatch(AGE);
-  } else if(sub_token == "quanti.mutcor.patch") {
-    addMutCorPerPatch(AGE);
-  } else if(sub_token == "quanti.pleio.patch") {
-    addPleioPerPatch(AGE);
   } else
     return false;
   
@@ -2200,30 +1888,6 @@ void TTQuantiSH::addQuanti (age_t AGE)
       }
     }
   }
-
-  //mutcor
-  if (_nb_trait > 1) {
-    unsigned int c = 0, mutcor;
-    for(unsigned int t = 0; t < _nb_trait; ++t) {
-      for(unsigned int v = t + 1; v < _nb_trait; ++v) {
-    	mutcor = (t+1)*10+(v+1) ;
-    	t1 = tstring::int2str(mutcor);
-        add("", name + t1 +".mutcor",AGE,c++,0,0,&TTQuantiSH::getMutCor,0,0);
-      }
-    }
-  }
-
-  //pleio
-  unsigned int pos;
-  for(unsigned int l = 0; l < _nb_locus; ++l) {
-    pos = l * _nb_trait;
-    string locus = tstring::int2str(l+1);
-    for(unsigned int t = 0; t < _nb_trait; ++t){
-        string trait = tstring::int2str(t+1);
-        add("", suffix + "pleio.l" + locus + "t" + trait, AGE, l, 0, 0, &TTQuantiSH::getPleio, 0, 0);
-    }
-  }
-
 }
 // ----------------------------------------------------------------------------------------
 // addEigen
@@ -2327,8 +1991,6 @@ void TTQuantiSH::addQuantiPerPatch (age_t AGE)
   addVarPerPatch(AGE);
   addCovarPerPatch(AGE);
   addEigenPerPatch(AGE);
-  addMutCorPerPatch(AGE);
-  addPleioPerPatch(AGE);
   
 }
 // ----------------------------------------------------------------------------------------
@@ -2452,85 +2114,6 @@ void TTQuantiSH::addCovarPerPatch (age_t AGE)
     }
   }
   
-}
-// ----------------------------------------------------------------------------------------
-// addMutCorPerPatch
-// ----------------------------------------------------------------------------------------
-void TTQuantiSH::addMutCorPerPatch (age_t AGE)
-{
-  if(_nb_trait < 2) {
-    warning("not recording traits mutational correlation with only one \"quanti\" trait!\n");
-    return;
-  }
-
-  if (AGE == ALL) {
-    addMutCorPerPatch(ADULTS);
-    addMutCorPerPatch(OFFSPRG);
-    return;
-  }
-
-  string suffix = (AGE == ADULTS ? "adlt.":"off.");
-  string patch;
-  string mutcor;
-  unsigned int patchNbr = _pop->getPatchNbr();
-
-  void (TTQuantiSH::* setter) (void) = (AGE == ADULTS ?
-                                        &TTQuantiSH::setAdultStats : &TTQuantiSH::setOffsprgStats);
-
-  add("Mutational correlation of trait 1 and trait 2 in patch 1", suffix + "mutcor.q12.p1",  AGE, 0, 0, 0, 0,
-      &TTQuantiSH::getMutCorPerPatch, setter);
-
-  unsigned int c;
-  for(unsigned int p = 0; p < patchNbr; p++) {
-    patch = ".p" + tstring::int2str(p+1);
-    c = 0;
-    for(unsigned int t = 0; t < _nb_trait; ++t) {
-      for(unsigned int v = t + 1; v < _nb_trait; ++v){
-        if(p==0 && t==0 && v==1) {c++; continue;}
-        mutcor = tstring::int2str((t+1)*10+v+1);
-        add("", suffix + "mutcor.q" + mutcor + patch,  AGE, p, c++, 0, 0, &TTQuantiSH::getMutCorPerPatch, 0);
-      }
-    }
-  }
-
-}
-// ----------------------------------------------------------------------------------------
-// addPleioPerPatch
-// ----------------------------------------------------------------------------------------
-void TTQuantiSH::addPleioPerPatch (age_t AGE)
-{
-  if (AGE == ALL) {
-    addPleioPerPatch(ADULTS);
-    addPleioPerPatch(OFFSPRG);
-    return;
-  }
-
-  string suffix = (AGE == ADULTS ? "adlt.":"off.");
-  string patch;
-  string locus;
-  string trait;
-  unsigned int patchNbr = _pop->getPatchNbr();
-
-  void (TTQuantiSH::* setter) (void) = (AGE == ADULTS ?
-                                        &TTQuantiSH::setAdultStats : &TTQuantiSH::setOffsprgStats);
-
-  add("pleiotropic connection of locus 1 and trait 1 in patch 1", suffix + "pleio.l1t1.p1",  AGE, 0, 0, 0, 0,
-      &TTQuantiSH::getPleioPerPatch, setter);
-
-  unsigned int pos;
-  for(unsigned int p = 0; p < patchNbr; p++) {
-    patch = ".p" + tstring::int2str(p+1);
-    for(unsigned int l = 0; l < _nb_locus; ++l) {
-      pos = l * _nb_trait;
-      locus = tstring::int2str(l+1);
-      for(unsigned int t = 0; t < _nb_trait; ++t){
-        if(p==0 && l==0 && t==0) {pos++; continue;}
-        trait = tstring::int2str(t+1);
-        add("", suffix + "pleio.l" + locus + "t" + trait + patch,  AGE, p, pos++, 0, 0, &TTQuantiSH::getPleioPerPatch, 0);
-      }
-    }
-  }
-
 }
 // ----------------------------------------------------------------------------------------
 // addEigenPerPatch
@@ -2705,55 +2288,24 @@ double TTQuantiSH::getSkewPerPatch (unsigned int i, unsigned int p)
 // ----------------------------------------------------------------------------------------
 void TTQuantiSH::setDataTables(age_t AGE) 
 {
-  //cout << "\nStart of TTQuantiSH::setDataTable!\t";
-  unsigned int **sizes, **mutcor_sizes, **pleio_sizes;
+  unsigned int **sizes;
   unsigned int nb_patch = _pop->getPatchNbr();
+  
   sizes = new unsigned int * [_nb_trait];
-  mutcor_sizes = new unsigned int * [(_nb_trait*(_nb_trait -1)/2)];
-  pleio_sizes = new unsigned int * [_nb_locus*_nb_trait];
   
   for(unsigned int i = 0; i < _nb_trait; ++i) {
     sizes[i] = new unsigned int [nb_patch];
-    for(unsigned int j = 0; j < nb_patch; ++j){
+    for(unsigned int j = 0; j < nb_patch; ++j)
       sizes[i][j] = _pop->size(AGE, j);
-      //cout << "\nPatch " << j+1 << ". Trait " << i+1 << ". Size of pop: " << sizes[i][j];
-    }
   }
   
-  for(unsigned int i = 0; i < (_nb_trait*(_nb_trait -1)/2); ++i) {
-    mutcor_sizes[i] = new unsigned int [nb_patch];
-    for(unsigned int j = 0; j < nb_patch; ++j){
-      mutcor_sizes[i][j] = _pop->size(AGE, j);
-      //cout << "\nPatch " << j+1 << ". Trait Pair " << i+1 << ". Size of pop: " << mutcor_sizes[i][j];
-    }
-  }
-
-  for(unsigned int i = 0; i < (_nb_locus*_nb_trait); ++i) {
-    pleio_sizes[i] = new unsigned int [nb_patch];
-    for(unsigned int j = 0; j < nb_patch; ++j){
-      pleio_sizes[i][j] = _pop->size(AGE, j);
-      //cout << "\nPatch " << j+1 << ". Pleio Seq " << i+1 << ". Size of pop: " << pleio_sizes[i][j];
-    }
-  }
   _phenoTable.update(_nb_trait, nb_patch, sizes);
   _genoTable.update(_nb_trait, nb_patch, sizes);
-//  _mutcorTable.update(_nb_trait, nb_patch, sizes);
-//  _pleioTable.update(_nb_trait, nb_patch, sizes);
-  _mutcorTable.update((_nb_trait*(_nb_trait -1)/2), nb_patch, mutcor_sizes);
-  _pleioTable.update((_nb_locus*_nb_trait), nb_patch, pleio_sizes);  // TODO how to make these work
   
   for(unsigned int i = 0; i < _nb_trait; ++i)
     delete [] sizes[i];
   delete [] sizes;
   
-  for(unsigned int i = 0; i < (_nb_trait*(_nb_trait -1)/2); ++i)
-    delete [] mutcor_sizes[i];
-  delete [] mutcor_sizes;
-
-  for(unsigned int i = 0; i < (_nb_locus*_nb_trait); ++i)
-    delete [] pleio_sizes[i];
-  delete [] pleio_sizes;
-
   Patch* patch;
   age_idx age = (AGE == ADULTS ? ADLTx : OFFSx);
   
@@ -2767,63 +2319,45 @@ void TTQuantiSH::setDataTables(age_t AGE)
       fatal("problem while recording quanti trait values; table size doesn't match patch size.\n");
     }
     store_quanti_trait_values(patch, i, patch->size(MAL, age), &n, MAL, age, &_phenoTable, &_genoTable,
-    		           &_mutcorTable, &_pleioTable, _nb_trait, _nb_locus, _SHLinkedTraitIndex);
+                       _nb_trait, _SHLinkedTraitIndex);
+    
     store_quanti_trait_values(patch, i, patch->size(FEM, age), &n, FEM, age, &_phenoTable, &_genoTable,
-    			  	   &_mutcorTable, &_pleioTable, _nb_trait, _nb_locus, _SHLinkedTraitIndex);
-    if (n != _phenoTable.size(0,i) || n != _genoTable.size(0,i) || n != _mutcorTable.size(0,i)|| n != _pleioTable.size(0,i)) {
+                       _nb_trait, _SHLinkedTraitIndex);
+    
+    if (n != _phenoTable.size(0,i) || n != _genoTable.size(0,i)) {
       fatal("problem while recording quanti trait values; size counter doesn't match table size.\n");
     }
   }
-  //cout << "\nEnd of TTQuantiSH::setDataTable!\t";
-
 }
 // ----------------------------------------------------------------------------------------
 // store_trait_values
 // ----------------------------------------------------------------------------------------
 void store_quanti_trait_values (Patch* patch, unsigned int patchID, unsigned int size, unsigned int *cntr,
                          sex_t SEX, age_idx AGE, DataTable<double> *ptable, DataTable<double> *gtable,
-						 DataTable<double> *mutcortable, DataTable<double> *pleiotable, unsigned int nTrait, unsigned int nLocus, unsigned int TraitIndex)
+                         unsigned int nTrait, unsigned int TraitIndex)
 {
-  //cout << "\nStart of store_quanti_trait_values!\t";
   double *phe;
   TTQuanti *trait;
-  //cout << "\nSize: " << size << endl;
-
+  
   for(unsigned int j = 0; j < size; ++j) {
     
     trait = dynamic_cast<TTQuanti*> (patch->get(SEX, AGE, j)->getTrait( TraitIndex ));
     
     phe = (double*)trait->getValue();
-//    cout << "Phenotypes: " << phe[4];
+    
     for(unsigned int k = 0; k < nTrait; k++){
       ptable->set( k, patchID, (*cntr), phe[k]);
       gtable->set( k, patchID, (*cntr), trait->get_genotype(k));
     }
-    for(unsigned int m = 0; m < (nTrait*(nTrait-1)/2); m++){
-      mutcortable->set( m, patchID, (*cntr), trait->get_mutcor_genotype(m));
-    }
-    for(unsigned int p = 0; p < (nTrait*nLocus); p++){
-      pleiotable->set( p, patchID, (*cntr), trait->get_pleio_genotype(p));
-    }
-//    for(unsigned int m = 0; m < nTrait; m++){
-//      mutcortable->set( m, patchID, (*cntr), trait->get_mutcor_genotype(m));
-//    }
-//    for(unsigned int p = 0; p < nTrait; p++){
-//      pleiotable->set( p, patchID, (*cntr), trait->get_pleio_genotype(p));
-//    }
     (*cntr)++;
-//    cout << "\tcntr: " << *cntr;
   }
-  //cout << "\nEnd of store_quanti_trait_values!\t";
-
+  
 }
 // ----------------------------------------------------------------------------------------
 // setStats
 // ----------------------------------------------------------------------------------------
 void TTQuantiSH::setStats (age_t AGE)
 {  
-  //cout << "\nStart of TTQuantiSH::setStats!\t";
-
   if(_table_set_age == AGE 
      && _table_set_gen == _pop->getCurrentGeneration()
      && _table_set_repl == _pop->getCurrentReplicate())
@@ -2832,10 +2366,9 @@ void TTQuantiSH::setStats (age_t AGE)
   unsigned int pop_size = _pop->size(AGE);
   unsigned int patch_size;
   double *phenot1, *genot1, *genot2;
-  double *mutcort12, *pleiot1;
   
   unsigned int nb_patch = _pop->getPatchNbr();
-  //cout << "\nsetStats Patch Number: " << nb_patch;
+  
   if(nb_patch < _patchNbr) {
     warning("increase in patch number detected (in Quanti Stat Handler),");
     warning("stats for quanti trait will not be recorded in new patches, patch identity may have changed.\n");
@@ -2865,12 +2398,12 @@ void TTQuantiSH::setStats (age_t AGE)
       _pVa[t][j] = my_variance_with_fixed_mean (genot1,  patch_size, _pmeanG[t][j]);
            
     }
+    
     if(_nb_trait > 1) { 
       c = 0;
       //    calculate the covariances and G, need to adjust dimensions in class declaration
       for(unsigned int t1 = 0; t1 < _nb_trait; t1++) {
         //      set the diagonal elements of G here
-//  	    cout << "\nWhat is 'c': " << c;
         
         gsl_matrix_set(_G, t1, t1, _pVa[t1][j]);
         
@@ -2897,17 +2430,6 @@ void TTQuantiSH::setStats (age_t AGE)
         for(unsigned int v = 0; v < _nb_trait; v++)
           _peigvect[j][pv++] = gsl_matrix_get (_evec, v, t); //read eigenvectors column-wise
       }
-
-      for(unsigned int m=0; m < (_nb_trait*(_nb_trait-1)/2); m++){
-        mutcort12	= _mutcorTable.getClassWithinGroup(m,j);
-        _pmean_mutcor[j][m] = my_mean (mutcort12, patch_size);
-        //cout << "\nPatch mutcor mean: " << _pmean_mutcor[j][m];
-      }
-    }
-    for(unsigned int p=0; p < (_nb_trait*_nb_locus); p++){
-      pleiot1	= _pleioTable.getClassWithinGroup(p,j);
-      _pmean_pleio[j][p] = my_mean (pleiot1, patch_size);
-      //cout << "\nPatch pleio means: " << _pmean_pleio[j][p];
     }
   }
   
@@ -2915,7 +2437,6 @@ void TTQuantiSH::setStats (age_t AGE)
   c = 0; //reset covariance positioner
   //among demes stats:
   for(unsigned int t1 = 0; t1 < _nb_trait; t1++) {
-//    cout << "\nWhat is 'c' among demes: " << c;
     
     phenot1 = _phenoTable.getGroup(t1);
     genot1  = _genoTable.getGroup(t1);
@@ -2932,7 +2453,7 @@ void TTQuantiSH::setStats (age_t AGE)
     
     gsl_matrix_set(_G, t1, t1, _Vb[t1]); //_G here becomes the D-matrix, the among-deme (Difference) covariance matrix 
     
-    for(unsigned int t2 = t1 + 1; t2 < _nb_trait; t2++) { // TODO put into if(_nb_trait > 1){} below?
+    for(unsigned int t2 = t1 + 1; t2 < _nb_trait; t2++) {
       
       meanGamong2 = my_mean (_pmeanG[t2], nb_patch);
       
@@ -2954,19 +2475,8 @@ void TTQuantiSH::setStats (age_t AGE)
         _eigvect[t2][t1] = gsl_matrix_get (_evec, t2, t1);      
       }
     }
-
-    for(unsigned int m=0; m < (_nb_trait*(_nb_trait-1)/2); m++){
-      mutcort12	= _mutcorTable.getGroup(m);
-      _mean_mutcor[m] = my_mean (mutcort12, pop_size);
-//      cout << "\nPOPULATION mutcor mean: " << _mean_mutcor[m];
-    }
   }
   
-//  for(unsigned int p=0; p < (_nb_trait*_nb_locus); p++){
-//    pleiot1	= _pleioTable.getGroup(p);
-//    _mean_pleio[p] = my_mean (pleiot1, pop_size);
-//  } TODO seqmentation fault b/c _pleioTable Group is not the size of pop_size? IDK
-
 #else
   fatal("install the GSL library to get the quanti stats!\n");
 #endif
@@ -2974,7 +2484,6 @@ void TTQuantiSH::setStats (age_t AGE)
   _table_set_age = AGE;
   _table_set_gen = _pop->getCurrentGeneration();  
   _table_set_repl = _pop->getCurrentReplicate();
-  //cout << "\nEnd of TTQuantiSH::setStats!\t";
   
 }
 // ----------------------------------------------------------------------------------------
@@ -2982,8 +2491,7 @@ void TTQuantiSH::setStats (age_t AGE)
 // ----------------------------------------------------------------------------------------
 void TTQuantiFH::FHwrite()
 {
-  cout << "\nStart of TTQuantiFH::FHwrite!\t";
-//  vector< vector<unsigned int> > ttable = _FHLinkedTrait->get_trait_table();
+  vector< vector<unsigned int> > ttable = _FHLinkedTrait->get_trait_table();
   Metapop* pop = get_pop_ptr();
   
   if (!pop->isAlive()) return;
@@ -2999,35 +2507,22 @@ void TTQuantiFH::FHwrite()
   
   FILE<<"pop ";
   if(print_gene) {
-    // OLD file header creation for full pleiotropy  // prints all genes whether they contribute to traits or not
-	for(unsigned int k = 0; k < _FHLinkedTrait->get_nb_traits(); k++)
+    // OLD file header creation for full pleiotropy (non-variable)
+	/*for(unsigned int k = 0; k < _FHLinkedTrait->get_nb_traits(); k++)
       for(unsigned int l = 0; l < _FHLinkedTrait->get_nb_locus(); l++)
-    	          FILE<<"t"<<k+1<<"l"<<l+1<<"1 "<<"t"<<k+1<<"l"<<l+1<<"2 ";
-   /* for(unsigned int k = 0; k < _FHLinkedTrait->get_nb_traits(); k++) {
+    	          FILE<<"t"<<k+1<<"l"<<l+1<<"1 "<<"t"<<k+1<<"l"<<l+1<<"2 ";*/
+    for(unsigned int k = 0; k < _FHLinkedTrait->get_nb_traits(); k++) {
       for(unsigned int l = 0; l < ttable[k].size(); l++) {
     	  	  	  FILE<<"t"<<k+1<<"l"<<l+1<<"1 "<<"t"<<k+1<<"l"<<l+1<<"2 ";
       }
-    }*/
+    }
   }
   
   for(unsigned int k = 0; k < _FHLinkedTrait->get_nb_traits(); k++) {
     FILE<<"P"<<k+1<< " "; 
     if(print_genotype) FILE<<"G"<<k+1<< " ";
   }
-  // mutation correlation "genotype"
-  if(print_gene) {
-    for(unsigned int t = 0; t < _FHLinkedTrait->get_nb_traits(); ++t) {
-      for(unsigned int v = t + 1; v < _FHLinkedTrait->get_nb_traits(); ++v){
-        FILE<<"ru"<<t+1<<v+1<<"a1 "<<"ru"<<t+1<<v+1<<"a2 ";
-      }
-    }
-  }
-  // pleiotropic connectivity "genotype"
-  for(unsigned int l = 0; l < _FHLinkedTrait->get_nb_locus(); ++l){
-	for(unsigned int t = 0; t < _FHLinkedTrait->get_nb_traits(); ++t) {
-		FILE<<"pl"<<l+1<<"t"<<t+1<<"a1 "<<"pl"<<l+1<<"t"<<t+1<<"a2 ";
-    }
-  }
+  
   FILE<<"age sex home ped isMigrant father mother ID\n";
   
   age_t pop_age = pop->getCurrentAge(); //flag telling which age class should contain individuals
@@ -3049,9 +2544,9 @@ void TTQuantiFH::print(ofstream& FH, age_idx Ax, bool print_gene, bool print_gen
   Individual* ind;
   TTQuanti* trait;
   double* Tval;
-  double **genes, **mutcor_genes, **pleio_genes;
-  unsigned int loc, nb_trait=_FHLinkedTrait->get_nb_traits(), nb_locus = _FHLinkedTrait->get_nb_locus();
-//  vector< vector<unsigned int> > ttable =_FHLinkedTrait->get_trait_table();
+  double **genes;
+  unsigned int loc, nb_trait=_FHLinkedTrait->get_nb_traits();//, nb_locus = _FHLinkedTrait->get_nb_locus();
+  vector< vector<unsigned int> > ttable =_FHLinkedTrait->get_trait_table();
 
   for(int i = 0; i < patchNbr; i++) {
     
@@ -3067,20 +2562,20 @@ void TTQuantiFH::print(ofstream& FH, age_idx Ax, bool print_gene, bool print_gen
       
       if(print_gene){
         genes = (double**)trait->get_sequence();
-
+        
         FH.precision(6);
-        // OLD gene value output for full pleiotropy // prints all genes whether they contribute to traits or not
-        for(unsigned int k = 0; k < nb_trait; k++) {
+        // OLD gene value output for full pleiotropy (non-variable)
+        /*for(unsigned int k = 0; k < nb_trait; k++) {
 		  for(unsigned int l = 0; l < nb_locus; l++) {
 		    loc = l * nb_trait + k;
 		    FH<<genes[0][loc]<<" "<<genes[1][loc]<<" ";
 		  }
-		}
-       /* for(unsigned int k = 0; k < ttable.size(); k++) {
+		}*/
+        for(unsigned int k = 0; k < ttable.size(); k++) {
           for(unsigned int l = 0; l < ttable[k].size(); l++) {
         	    FH<<genes[0][ttable[k][l]]<<" "<<genes[1][ttable[k][l]]<<" ";
           }
-        } */
+        }
       }
       
       FH.precision(4);
@@ -3089,26 +2584,6 @@ void TTQuantiFH::print(ofstream& FH, age_idx Ax, bool print_gene, bool print_gen
         if(print_genotype) FH << trait->get_genotype(k) << " ";
       }
       
-      if(print_gene){
-        mutcor_genes = (double**)trait->get_mutcor_sequence();
-
-        FH.precision(3);
-        for(unsigned int m = 0; m < (nb_trait*(nb_trait-1)/2); m++){
-          FH<<mutcor_genes[0][m]<<" "<<mutcor_genes[1][m]<<" ";
-        }
-      }
-
-      pleio_genes = (double**)trait->get_pleio_sequence();
-//      FH.precision(1);
-      unsigned int pos;
-      for(unsigned int l = 0; l < nb_locus; l++){
-    	pos = l * nb_trait;
-    	for(unsigned int t = 0; t < nb_trait; t++){
-    	  FH<<pleio_genes[0][pos]<<" "<<pleio_genes[1][pos]<<" ";
-    	  pos++;
-    	}
-      }
-
       FH<<Ax<<" "<<ind->getSex()<<" "<<ind->getHome()+1<<" "<<ind->getPedigreeClass()<<" "
       << (ind->getFather() && ind->getMother() ?
           (ind->getFather()->getHome()!=i) + (ind->getMother()->getHome()!=i) : 0)
@@ -3128,19 +2603,19 @@ void TTQuantiFH::print(ofstream& FH, age_idx Ax, bool print_gene, bool print_gen
         genes = (double**)trait->get_sequence();
         
         FH.precision(6);
-        // OLD gene value output for full pleiotropy // prints all genes whether they contribute to traits or not
-        for(unsigned int k = 0; k < nb_trait; k++) {
+        // OLD gene value output for full pleiotropy (non-variable)
+        /*for(unsigned int k = 0; k < nb_trait; k++) {
           for(unsigned int l = 0; l < nb_locus; l++) {
             loc = l * nb_trait + k;
             
             FH<<genes[0][loc]<<" "<<genes[1][loc]<<" ";
           }
-        }
-       /* for(unsigned int k = 0; k < ttable.size(); k++) {
+        }*/
+        for(unsigned int k = 0; k < ttable.size(); k++) {
           for(unsigned int l = 0; l < ttable[k].size(); l++) {
         	    FH<<genes[0][ttable[k][l]]<<" "<<genes[1][ttable[k][l]]<<" ";
           }
-        }*/
+        }
       }
       
       FH.precision(4);
@@ -3149,26 +2624,6 @@ void TTQuantiFH::print(ofstream& FH, age_idx Ax, bool print_gene, bool print_gen
         if(print_genotype) FH << trait->get_genotype(k) << " ";
       }
       
-      if(print_gene){
-        mutcor_genes = (double**)trait->get_mutcor_sequence();
-
-        FH.precision(3);
-        for(unsigned int m = 0; m < (nb_trait*(nb_trait-1)/2); m++){
-          FH<<mutcor_genes[0][m]<<" "<<mutcor_genes[1][m]<<" ";
-        }
-      }
-
-      pleio_genes = (double**)trait->get_pleio_sequence();
-//      FH.precision(1);
-      unsigned int pos;
-      for(unsigned int l = 0; l < nb_locus; l++){
-    	pos = l * nb_trait;
-    	for(unsigned int t = 0; t < nb_trait; t++){
-    	  FH<<pleio_genes[0][pos]<<" "<<pleio_genes[1][pos]<<" ";
-    	  pos++;
-    	}
-      }
-
       FH<<Ax<<" "<<ind->getSex()<<" "<<ind->getHome()+1<<" "<<ind->getPedigreeClass()<<" "
       << (ind->getFather() && ind->getMother() ?
           (ind->getFather()->getHome()!=i) + (ind->getMother()->getHome()!=i) : 0)<<" "<<ind->getFatherID()<<" "<<ind->getMotherID()<<" "<<ind->getID()<<std::endl;

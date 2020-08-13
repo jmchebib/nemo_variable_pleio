@@ -60,8 +60,6 @@ class TTDispersal : public TTrait
   trait_t _type;
   /** One diploid locus coding for a sex-specific dispersal rate.**/
   double _sequence[2];
-  unsigned char _pleio_sequence[2];
-  double _mutcor_sequence[2];
   double _phenotype;
 
 public:
@@ -96,14 +94,10 @@ public:
   virtual void*   getValue             ( ) const           {return (void*)&_phenotype;}
   /** @return NULL, here the _sequence is not a dble ptr. **/
   virtual void**  get_sequence         ( ) const           {return 0;}
-  virtual void**  get_pleio_sequence   ( ) const           {return 0;}
-  virtual void**  get_mutcor_sequence  ( ) const           {return 0;}
   virtual double  get_allele_value     (int loc, int all)  {return ( !(all<2) ? 0 : _sequence[all] );}
   virtual void    set_allele_value (unsigned int locus, unsigned int allele, double value)
     {assert(allele < 2); _sequence[allele] = value;}
   virtual void    set_sequence         (void** seq)        { }
-  virtual void    set_pleio_sequence   (void** seq)        { }
-  virtual void    set_mutcor_sequence  (void** seq)        { }
   virtual void*   set_trait            (void* value)       {return value;}
   virtual void    show_up              ( );
   virtual TTDispersal*  clone          ( )                 {return new TTDispersal(*this);}

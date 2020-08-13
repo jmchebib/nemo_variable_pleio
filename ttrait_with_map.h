@@ -80,7 +80,8 @@ private:
   unsigned int  _numChromosome;
   unsigned int  *_perChrsmLength;          //array length is _numChromosome
   unsigned int  *_chrsmFirstLocusPosition; //array length is _numChromosome
-  unsigned int  _totalLength;
+  unsigned int  _totalLength;  // total map length
+  unsigned int  _recombLength; // this is _totalLength + 1; used to draw the x-over spots
   unsigned int  _totalNumLoci;
   double        _resolution;
   double        _totRecombEventsMean;
@@ -95,6 +96,8 @@ public:
   
   ~GeneticMap() {reset_tables();}
   
+  bool getGeneticMap (trait_t trait, double** table, unsigned int table_length);
+
   double getResolution ( ) {return _resolution;}
   
   double setResolution (double val) 
@@ -220,6 +223,8 @@ public:
   
   void registerGeneticMap ();
   
+  void recordRandomMap ();
+
   static void recombine (unsigned long indID);
   
   virtual void reset ();

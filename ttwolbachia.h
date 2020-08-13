@@ -79,14 +79,10 @@ public:
   virtual void*   set_trait			  (void* value)
   {  _is_infected = *(bool*)value; return &_is_infected; }
   virtual void    set_sequence    (void** seq)  { }
-  virtual void    set_pleio_sequence    (void** seq)  { }
-  virtual void    set_mutcor_sequence   (void** seq)  { }
   virtual void    set_value       ()  { }
   virtual void*   getValue			  () const {return (void*)&_is_infected;}
   virtual trait_t get_type			  () const {return WOLB;}
   virtual void**  get_sequence    () const {return NULL;}  
-  virtual void**  get_pleio_sequence    () const {return NULL;}
-  virtual void**  get_mutcor_sequence   () const {return NULL;}
   virtual double  get_allele_value(int loc, int all) {return _is_infected;}  
   virtual void    set_allele_value(unsigned int locus, unsigned int allele, double value)  {_is_infected=(bool)value;}  
   virtual void    show_up			    ()       {}

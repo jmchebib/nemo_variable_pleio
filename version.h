@@ -4,7 +4,7 @@
 *  Nemo2
 *  @author fred
 *  
-*   Copyright (C) 2006-2015 Frederic Guillaume
+*   Copyright (C) 2006-2017 Frederic Guillaume
 *   frederic.guillaume@ieu.uzh.ch
 *
 *   This file is part of Nemo
@@ -26,6 +26,6 @@
 */ 
 #define MAIN_VERSION 2
 #define MINOR_VERSION 3
-#define REVISION 46
-#define RELEASE "r7"
-#define VERSION_DATE "[09 Feb 2017]"
+#define REVISION 50
+#define RELEASE ""
+#define VERSION_DATE "[16 Aug 2018]"

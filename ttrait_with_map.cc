@@ -99,6 +99,7 @@ bool TTProtoWithMap::setGeneticMapParameters (string prefix)
 //map resolution:
   param_name = prefix + "_genetic_map_resolution";
   _mapResolution = (get_parameter(param_name)->isSet() ? get_parameter_value(param_name) : 1);
+//  _map.setResolution(_mapResolution);
   
   //set map's resolution, depends on current resolution
   //***!! have to update current map if resolution changes !!*** <-----
@@ -245,6 +246,12 @@ bool TTProtoWithMap::setGeneticMapParameters (string prefix)
   // transmit positions to the map!!
   registerGeneticMap();
   
+//  // record the random loci positions into the trait parameter for saving in log file
+//  if (get_parameter(prefix + "_random_genetic_map")->isSet()) {
+//
+//    recordRandomMap();
+//  }
+
   return true;
 }
 //---------------------------------------------------------------------------------------------
@@ -257,13 +264,17 @@ bool TTProtoWithMap::setNumLociPerChromosome (string prefix)
   _numLociPerChrmsm = new unsigned int[_numChromosome];
 
   //fill the table:
+
   string param_name = prefix + "_chromosome_num_locus";
+
   if ( !get_parameter(param_name)->isSet()) {
     
     if(_numLoci % _numChromosome != 0) {
       
-      error("Loci cannot be evenly distributed on chromosome map for trait %s\n", prefix.c_str());
-      return false;
+//      error("Loci cannot be evenly distributed on chromosome map for trait %s\n", prefix.c_str());
+//      return false;
+      return error("Loci cannot be evenly distributed on chromosome map for trait %s\n", prefix.c_str());
+
       
     } else {
 
@@ -272,38 +283,54 @@ bool TTProtoWithMap::setNumLociPerChromosome (string prefix)
       }
     }
     
-  } else {
+  } else { //chromosome num locus provided in input
     
     TMatrix numlocmat;
     
     get_parameter(param_name)->getMatrix(&numlocmat);
     
     if(numlocmat.getNbRows() != 1) {
-      error("\"%s_chromosome_num_locus\" must be one-dimensional, with num. loci per chromosome as elements.\n", prefix.c_str());
-      return false;
+//      error("\"%s_chromosome_num_locus\" must be one-dimensional, with num. loci per chromosome as elements.\n", prefix.c_str());
+//      return false;
+
+      return error("\"%s_chromosome_num_locus\" must be one-dimensional, with num. loci per chromosome as elements.\n", prefix.c_str());
+
     }
     
     if(numlocmat.getNbCols() > _numChromosome) {
-      error("\"%s_chromosome_num_locus\" must have same number of elements (chromosomes) as genetic map parameters.\n", prefix.c_str());
-      return false;
+//      error("\"%s_chromosome_num_locus\" must have same number of elements (chromosomes) as genetic map parameters.\n", prefix.c_str());
+//      return false;
+
+      return error("\"%s_chromosome_num_locus\" must have same number of elements (chromosomes) as genetic map parameters.\n", prefix.c_str());
+
     }
     
     unsigned int cntr=0;
+
     for (unsigned int i = 0; i < _numChromosome; ++i) {
+
       if(numlocmat.get(0, i) == 0){
-        error("the genetic map doesn't accept empty chromosomes with 0 loci\n");
-        return false;
+//        error("the genetic map doesn't accept empty chromosomes with 0 loci\n");
+//        return false;
+
+        return error("the genetic map doesn't accept empty chromosomes with 0 loci\n");
+
       }
       _numLociPerChrmsm[i] = numlocmat.get(0, i);
       cntr += numlocmat.get(0, i);
     }
+
     if (cntr != _numLoci) {
-      error("\"%s_chromosome_num_locus\" has more loci than \"%s_loci\"\n", prefix.c_str(), prefix.c_str());
-      return false;
+//      error("\"%s_chromosome_num_locus\" has more loci than \"%s_loci\"\n", prefix.c_str(), prefix.c_str());
+//      return false;
+
+      return error("\"%s_chromosome_num_locus\" has more loci than \"%s_loci\"\n", prefix.c_str(), prefix.c_str());
+
     }
-  }
+
+  } //else chromosome num locus provided in input 
   
-  return true;  
+  return true;
 }
 //---------------------------------------------------------------------------------------------
 // recombination map
@@ -465,11 +492,53 @@ bool TTProtoWithMap::setRecombinationMapRandom ()
   mapParam = get_parameter( _paramPrefix + "_chromosome_num_locus" );
   mapParam->setIsSet(false);
   mapParam = get_parameter( _paramPrefix + "_genetic_map_resolution" );
-  mapParam->setArg(tstring::dble2str(_map.getResolution())); // the local resolution is not updated after registering the trait map, other traits might have changed it
+  mapParam->setArg(tstring::dble2str( _mapResolution )); // the local resolution is not updated after registering the trait map, other traits might have changed it
   mapParam->setIsSet(true);
   
   return true;
 }
+// ----------------------------------------------------------------------------------
+// registerGeneticMap
+// ----------------------------------------------------------------------------------
+void TTProtoWithMap::recordRandomMap ()
+{
+  // record positions into genetic_map parameter,
+  // will be saved with other params in log file
+  ostringstream map;
+
+  map<<"{";
+
+  for (unsigned int c = 0, l = 0; c < _numChromosome; c++) {
+    map<<"{";
+
+    for (unsigned int i = 0; i < _numLociPerChrmsm[c]-1 && l < _numLoci; i++) {
+      map<<_lociMapPositions[ l++ ]<<", ";
+    }
+    map<<_lociMapPositions[ l++ ];
+    map<<"}";
+  }
+  map<<"}";
+
+  // record the position inthe genetic map parameter
+  Param* mapParam = get_parameter( _paramPrefix + "_genetic_map" );
+  mapParam->setArg(map.str());
+  mapParam->setIsSet(true);
+
+  //disable the random map parameter
+  mapParam = get_parameter( _paramPrefix + "_random_genetic_map" );
+  mapParam->setIsSet(false);
+
+  //disable the chromosome num locus parameter
+  mapParam = get_parameter( _paramPrefix + "_chromosome_num_locus" );
+  mapParam->setIsSet(false);
+
+  // set the map resolution right, must be at the same scale as recorded in the map
+  mapParam = get_parameter( _paramPrefix + "_genetic_map_resolution" );
+  mapParam->setArg(tstring::dble2str( _map.getResolution() ) ); // the local resolution is not updated after registering the trait map, other traits might have changed it
+  mapParam->setIsSet(true);
+
+}
+
 // ----------------------------------------------------------------------------------
 // registerGeneticMap
 // ----------------------------------------------------------------------------------
@@ -662,7 +731,7 @@ unsigned int GeneticMap::addTrait (trait_t trait, unsigned int nChrm,
             _locPositionsPerTrait.size(), _nTrait-1);
     }
     
-    //copy the locus positions
+    //copy the locus positions, they are at the correct resolution already
     unsigned int* posTable = new unsigned int[nLoc];
     
     for (unsigned int i = 0; i < nLoc; ++i) {
@@ -729,10 +798,42 @@ unsigned int GeneticMap::addTrait (trait_t trait, unsigned int nChrm,
     //---- set all lookup tables (all genetic maps):
     //     we reset all tables each time a trait is added because _totalLength changes
     for (unsigned int t = 0; t < _nTrait; ++t) setLookupTable(t);
-    
+ 
+    //---- set the map size used to draw recombination spots; one less operation in recombine()...
+    _recombLength = _totalLength + 1;   
   }
   
   return traitIdx;
+}
+// ----------------------------------------------------------------------------------
+// getGeneticMap
+// ----------------------------------------------------------------------------------
+bool GeneticMap::getGeneticMap (trait_t trait, double** table, unsigned int table_length)
+{
+  map< trait_t, unsigned int>::const_iterator ITER = _traits.find(trait);
+
+  if(ITER == _traits.end())
+    return(error("failed to find trait \"%s\" in genetic map"), trait.c_str());
+
+  unsigned int idx = ITER->second;
+
+  assert(table_length == _numLociPerTrait[idx]);
+
+  unsigned int chr = 0, loc_cnt = _numLociPerChrsmPerTrait[idx][0];
+
+  for(unsigned int i = 0; i < table_length; ++i) {
+
+      if(i >= loc_cnt) {
+        chr++;
+        loc_cnt += _numLociPerChrsmPerTrait[idx][chr];
+      }
+
+      table[i][0] = chr;
+      table[i][1] = _locPositionsPerTrait[idx][i]*_resolution;
+
+  }
+
+  return true;
 }
 // ----------------------------------------------------------------------------------
 // rescaleMap
@@ -864,10 +965,10 @@ void GeneticMap::setLookupTable(unsigned int idx)
     stride += _numLociPerChrsmPerTrait[idx][c];
   }
   cout<<endl;
-  //  cout<<"Loc pos lookup table:"<<endl<<"{";
-  //  for(unsigned int i = 0; i < _superChrsmLength; ++i)
-  //    cout<<_recLociPositionTable[i]<<", ";
-  //  cout<<"}"<<endl;  
+//  cout<<"Loc pos lookup table:"<<endl<<"{";
+//  for(unsigned int i = 0; i < _superChrsmLength; ++i)
+//    cout<<_recLociPositionTable[i]<<", ";
+//  cout<<"}"<<endl;  
 
   cout<<"   Tot map length: "<<_totalLength<<endl;
   cout<<"   Mean num recombination events: "<<_totRecombEventsMean<<endl;
@@ -889,32 +990,25 @@ void GeneticMap::recombine (sex_t SEX)
   
   //draw the number of x-over depending on the total map size
   nbRec = (unsigned int)RAND::Poisson( _totRecombEventsMean );
+
+//  cout << "\n@@@ GeneticMap::recombine( SEX = "<<SEX<<" nbRec = "<<nbRec<<")"<<endl;
  
   //adjust
   if(nbRec > _totalNumLoci - 1) nbRec =  _totalNumLoci - 1; 
  
+  assert(nbRec < _totalNumLoci);
   
   //determine where the x-over will take place
   
   if(nbRec > 0) {
     
-    unsigned int* pos = new unsigned int [nbRec];
-    
-    for(unsigned int i = 0; i < nbRec; i++) {
-      
-      //draw position of x-over:
-      pos[i] = RAND::Uniform()*_totalLength +1;
-      //the +1 is necessary because the lookupTable (the map) starts with position 0
-      //position 0 should never be drawn as it would suppress recombination b/n two first loci
-      //it is safe so because the lookupTable has _totalLength +1 elements
-    }
-
     //the (automatically sorted) table of < locus number, num of x-over at locus position >
     map< unsigned int, unsigned int> cumul_rec_positions;
     
     //the iterator to read within the map
     map< unsigned int, unsigned int>::const_iterator recIter;
-    
+ 
+//    cout<<" --- computing rec map position: ";   
     //set up trait recombination spots, more than one x-over may happen b/n two loci of a given trait
     //two consecutive x-overs b/n two loci cancel each other
     //we need to cound the number of consecutive x-overs for each trait separately
@@ -926,8 +1020,14 @@ void GeneticMap::recombine (sex_t SEX)
       for(unsigned int i = 0, hit, num_interleaved_xover; i < nbRec; i++) {
       
         
-        hit = _lociLookupTable[t][ pos[i] ]; 
-        //this gives the locus to the right of that 'hit' position
+    	  // RAND::Uniform() : draw position of x-over
+    	  // _totalLength+1 : the +1 is necessary because the lookupTable (the map) starts with position 0
+    	  // 	position 0 should never be drawn as it would suppress recombination b/n two first loci
+    	  // 	it is safe so because the lookupTable has _totalLength +1 elements
+    	  // _lociLookupTable : gives the locus to the right of that 'hit' position
+        hit = _lociLookupTable[t][(size_t)(RAND::Uniform()*_recombLength)];
+
+//        cout<< "@"<<rand<<"("<< hit <<"),";
       
         num_interleaved_xover = cumul_rec_positions[hit];
         //returns 0 if position hit was not yet recorded
@@ -936,7 +1036,7 @@ void GeneticMap::recombine (sex_t SEX)
         //indicates that one more x-over happened b/n two loci
         
        }
-//      cout<<" --- recording rec position: ";
+//      cout<<"\n --- recording rec position: ";
       // record only the positions at which an odd number of x-over happened:
       for (recIter = cumul_rec_positions.begin(); recIter != cumul_rec_positions.end(); recIter++) {
         
@@ -947,8 +1047,6 @@ void GeneticMap::recombine (sex_t SEX)
       }
 //      cout<<endl;
     }// end_for_traits
-    
-    delete [] pos;
     
   } // end_if_nbRec 
   

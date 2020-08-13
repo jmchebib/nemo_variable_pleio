@@ -1087,15 +1087,16 @@ void TTDeletMutBitstrFH::FHread (string& filename)
   effects[0] = new double [nb_locus];
   effects[1] = new double [nb_locus];
   
-   string str;
-
-   for (unsigned int i = 0; i < nb_locus+5; ++i) {
+  cout<<"file state: "<<FILE<<endl;
+  
+  string str;
+  for (unsigned int i = 0; i < nb_locus+5; ++i) {
     FILE>>str;
   }
-  
+  cout<<"str: "<<str<<endl;
   while(FILE>>pop) {
     //FILE;
-  
+    cout<<"pop "<<pop<<endl;
     if(pop > (int)patchNbr)
       fatal("Patch number found in file exceeds number of patches in the population.\n");
     
@@ -1108,7 +1109,7 @@ void TTDeletMutBitstrFH::FHread (string& filename)
       for(unsigned int i = 0; i < 4; ++i)
         FILE>>str;
       
-  
+      cout<<"read effects line "<<xline<<" last was "<<effects[xline][nb_locus-1]<<endl;
       xline++;
     }
     else {
@@ -1138,6 +1139,8 @@ void TTDeletMutBitstrFH::FHread (string& filename)
       
       FILE >> age >> sex >> ped >> origin;
       
+      message("age %i sex %i ped %i origin %i\n", age , sex , ped , origin);
+      
       agex = (age == ADULTS ? ADLTx : OFFSx);
       
       ind = _pop->makeNewIndividual(0, 0, static_cast<sex_t> (sex), origin - 1);
@@ -1153,7 +1156,7 @@ void TTDeletMutBitstrFH::FHread (string& filename)
     lnbr++;
     
   }
-
+  cout<<"pop size after loading: "<<_pop->size()<<endl;
   FILE.close();  
   
   delete seq[0];

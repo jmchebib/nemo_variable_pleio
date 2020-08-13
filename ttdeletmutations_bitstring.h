@@ -73,8 +73,6 @@ private:
   unsigned int _nb_htz_mutations;
   
   bitstring* sequence[2];
-  bitstring* pleio_sequence[2];
-  bitstring* mutcor_sequence[2];
   bitstring *_htz, *_hmz;
   double _phenotype;
   
@@ -93,7 +91,7 @@ public:
   _mut_rate(0), _genomic_mut_rate(0), _strength(0), _dominance(0), _continuous_effects(0),
      _viability_func_ptr(0), _inherit_func_ptr(0),_mutation_func_ptr(0), _nb_mutations(0), 
      _nb_hmz_mutations(0),_nb_htz_mutations(0), _htz(0), _hmz(0), _phenotype(0), _type(DELE)
-  {sequence[0] = sequence[1] = pleio_sequence[0] = pleio_sequence[1] = mutcor_sequence[0] = mutcor_sequence[1] = NULL;}
+  {sequence[0] = sequence[1] = NULL;}
   
   TTDeletMutations_bitstring(const TTDeletMutations_bitstring& T) 
   : _myProto(T._myProto), _nb_locus(T._nb_locus), _fitness_model(T._fitness_model), 
@@ -103,7 +101,7 @@ public:
   _viability_func_ptr(T._viability_func_ptr),_inherit_func_ptr(T._inherit_func_ptr), 
   _mutation_func_ptr(T._mutation_func_ptr), _nb_mutations(0), _nb_hmz_mutations(0), 
   _nb_htz_mutations(0), _htz(0), _hmz(0), _phenotype(0), _type(DELE)
-  {sequence[0] = sequence[1] = pleio_sequence[0] = pleio_sequence[1] = mutcor_sequence[0] = mutcor_sequence[1] = NULL;}
+  {sequence[0] = sequence[1] = NULL;}
   
   virtual ~TTDeletMutations_bitstring() {reset();}
   
@@ -143,8 +141,6 @@ public:
   void            mutate_noredraw               ( );
 
   void            set_sequence                  (bitstring** seq);
-  void            set_pleio_sequence            (bitstring** seq);
-  void            set_mutcor_sequence           (bitstring** seq);
   //glob setters:
   static void     set_effects                   (float** fx);
   static void     set_recomb_template           (unsigned int size);
@@ -156,14 +152,10 @@ public:
   virtual void	  reset                         ( );
   virtual void*   set_trait                     (void* value)           {return NULL;}
   virtual void**  get_sequence                  ( )        const        {return (void**)&sequence[0];}
-  virtual void**  get_pleio_sequence            ( )        const        {return (void**)&pleio_sequence[0];}
-  virtual void**  get_mutcor_sequence           ( )        const        {return (void**)&mutcor_sequence[0];}
   virtual double  get_allele_value              (int loc, int all);
   /*Be aware that the set_allele_value here changes the mutation effect for all individuals in the pop!!*/
   virtual void    set_allele_value              (unsigned int locus, unsigned int allele, double value);
   virtual void    set_sequence                  (void** seq)            {}
-  virtual void    set_pleio_sequence            (void** seq)            {}
-  virtual void    set_mutcor_sequence           (void** seq)            {}
   virtual trait_t get_type                      ( )        const        {return _type;}
   virtual void    inherit                       (TTrait* mother, TTrait* father);
   virtual void    mutate                        ( )                     {(this->*_mutation_func_ptr)();}

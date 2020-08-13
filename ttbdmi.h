@@ -129,8 +129,6 @@ class TT_BDMI : public TTrait {
   TProtoBDMI* _myProto;
   
   bitstring* _sequence[2];
-  bitstring* _pleio_sequence[2];
-  bitstring* _mutcor_sequence[2];
   
   double _phenotype;
   
@@ -155,14 +153,14 @@ public:
   TT_BDMI()
   : _myProto(0), _phenotype(0), _isHaploid(0), _nb_locus(0), _mut_rate(0), _genomic_mut_rate(0),
   _recomb_rate(0), _inherit_func_ptr(0), _mutation_func_ptr(0), _viability_func_ptr(0)
-  {_sequence[0] = _sequence[1] = _pleio_sequence[0] = _pleio_sequence[1] = _mutcor_sequence[0]= _mutcor_sequence[1] = NULL;}
+  {_sequence[0] = _sequence[1] = NULL;}
   
   TT_BDMI(const TT_BDMI& T)
   : _myProto(T._myProto), _phenotype(0), _isHaploid(T._isHaploid), _nb_locus(T._nb_locus),
   _mut_rate(T._mut_rate), _genomic_mut_rate(T._genomic_mut_rate), _recomb_rate(T._recomb_rate), 
   _inherit_func_ptr(T._inherit_func_ptr), _mutation_func_ptr(T._mutation_func_ptr),
   _viability_func_ptr(T._viability_func_ptr)
-  {_sequence[0] = _sequence[1] = _pleio_sequence[0] = _pleio_sequence[1] = _mutcor_sequence[0]= _mutcor_sequence[1] = NULL;}
+  {_sequence[0] = _sequence[1] = NULL;}
   
   virtual ~TT_BDMI() { }
   
@@ -184,8 +182,6 @@ public:
   ///@}
   
   void            set_sequence                  (bitstring** seq);
-  void            set_pleio_sequence            (bitstring** seq);
-  void            set_mutcor_sequence           (bitstring** seq);
   
   //inheritance routines:
   void            inherit_haplo                 (TTrait* mother, TTrait* father);
@@ -211,14 +207,10 @@ public:
   virtual   void            mutate       () {(this->*_mutation_func_ptr)();}
   virtual   void*           set_trait    (void* value) {return NULL;}
   virtual   void            set_sequence (void** seq) {}
-  virtual   void            set_pleio_sequence (void** seq) {}
-  virtual   void            set_mutcor_sequence (void** seq) {}
   virtual   void            set_value    ()      {_phenotype = (this->*_viability_func_ptr)();}
   virtual   void*           getValue     () const {return (void*)&_phenotype;}
   virtual   trait_t         get_type     () const {return _myProto->get_type();}
   virtual   void**          get_sequence () const {return (void**)&_sequence[0];}
-  virtual   void**          get_pleio_sequence () const {return (void**)&_pleio_sequence[0];}
-  virtual   void**          get_mutcor_sequence () const {return (void**)&_mutcor_sequence[0];}
   virtual   double          get_allele_value   (int loc, int all);
   virtual   void            set_allele_value (unsigned int locus, unsigned int allele, double value);
   virtual   void            show_up  ();

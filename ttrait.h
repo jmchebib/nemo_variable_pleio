@@ -52,9 +52,6 @@ public:
   /**Called at the start of each replicate, sets the initial genotypes. Called by \c Individual::create(). **/
   virtual   void            init_sequence () = 0;
   
-  /**Called at the start of each replicate, sets the initial pleio matrix. Called by \c Individual::create(). **/
- // virtual   void            init_pleio_sequence () = 0;
-
   /**Called at the end of each simulation/replicate, deallocates sequence memory. **/
   virtual   void            reset () = 0;
   /** Inheritance procedure, creates a new trait from mother's and father's traits
@@ -73,14 +70,6 @@ public:
     * @param seq the existing sequence pointer
     **/
   virtual   void            set_sequence (void** seq) = 0;
-  /** Called to set the pleio sequence pointer to an existing trait
-    * @param seq the existing pleio sequence pointer
-    **/
-//  virtual   void            set_pleio_sequence (void** seq) = 0;
-  /** Called to set the pair-wise mutational correlation sequence pointer to an existing trait
-    * @param seq the existing mutcor sequence pointer
-    **/
-//  virtual   void            set_mutcor_sequence (void** seq) = 0;
   /** Called to read one allele value at a particular locus.
    * @return the allelic value at position 'all' at locus 'loc'
    * @param loc locus position in the sequence
@@ -108,14 +97,6 @@ public:
 	* @return the sequence pointer
     **/
   virtual   void**          get_sequence () const = 0;
-  /** pleio sequence accessor.
-	* @return the pleio sequence pointer
-    **/
-//  virtual   void**          get_pleio_sequence () const = 0;
-  /** mutcor sequence accessor.
-	* @return the mutcor sequence pointer
-    **/
-//  virtual   void**          get_mutcor_sequence () const = 0;
   /** Writes some info to stdout. **/
   virtual   void            show_up  () = 0;
   /** Returns a copy of itself. 

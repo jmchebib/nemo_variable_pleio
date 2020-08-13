@@ -1,4 +1,4 @@
-/**  $Id: ttneutralgenes.h,v 1.19 2016-05-02 12:06:15 fred Exp $
+/**  $Id: ttneutralgenes.h,v 1.20 2017-06-20 08:35:36 fred Exp $
 *
 *  @file ttneutralgenes.h
 *  Nemo2
@@ -67,22 +67,21 @@ private:
 
   //_sequence:
   unsigned char** _sequence; // ordered as [ploidy][locus]
-  unsigned char** _pleio_sequence;
-  unsigned char** _mutcor_sequence;
+
   const trait_t _type;
    
 public:
   
   TTNeutralGenes () 
     : _myProto(0),_allele_num(0),_locus_num(0),_ploidy(2),_mut_rate(0),_recomb_rate(0),_mut_model(0),
-    _init_model(0), _mutate_func_ptr(0), _inherit_func_ptr(0), _sequence(0), _pleio_sequence(0), _mutcor_sequence(0), _type(NTRL) { }
+    _init_model(0), _mutate_func_ptr(0), _inherit_func_ptr(0), _sequence(0), _type(NTRL) { }
   
   TTNeutralGenes(const TTNeutralGenes& T) 
     : _myProto(T._myProto),
     _allele_num(T._allele_num), _locus_num(T._locus_num), _ploidy(2), _mut_rate(T._mut_rate),
     _recomb_rate(T._recomb_rate),_mut_model(T._mut_model), _2L(T._2L),
     _init_model(T._init_model),_mutate_func_ptr(T._mutate_func_ptr), _inherit_func_ptr(T._inherit_func_ptr), 
-    _sequence(0), _pleio_sequence(0), _mutcor_sequence(0), _type(NTRL) { }
+    _sequence(0), _type(NTRL) { }
   
   virtual ~TTNeutralGenes ();
     
@@ -104,8 +103,6 @@ public:
   {_mutate_func_ptr = theFunc;}
   void            set_inherit_func_ptr (void(TProtoNeutralGenes::* theFunc)(sex_t, unsigned char*, unsigned char**))
   {_inherit_func_ptr = theFunc;}
-//  void            set_inherit_func_ptr (void(TProtoNeutralGenes::* theFunc)(sex_t, unsigned char*, unsigned char*, unsigned char**, unsigned char**))
-//  {_inherit_func_ptr = theFunc;}
   void            set_allele           (unsigned int loc, unsigned int al, unsigned char val) {_sequence[al][loc] = val;}
   ///@}
   
@@ -128,16 +125,12 @@ public:
   virtual void    reset                ( );
   virtual void*   set_trait            (void* value)           {return NULL;}
   inline virtual void**  get_sequence  ( )  const              {return (void**)_sequence;}
-//  inline void**  get_pleio_sequence  ( )  const        {return (void**)_pleio_sequence;}
-//  inline void**  get_mutcor_sequence  ( )  const       {return (void**)_mutcor_sequence;}
-    virtual double  get_allele_value     (int loc, int all)
+  virtual double  get_allele_value     (int loc, int all)  
     {return ( !(loc<(int)_locus_num) || !(all<(int)_ploidy) ? 0 : (double)_sequence[all][loc]);}
   virtual void    set_allele_value (unsigned int locus, unsigned int allele, double value)
     {assert(locus < _locus_num && allele < 2); _sequence[allele][locus] = (unsigned char)value;}
   virtual void    set_sequence         (void** seq);
-//  void    set_pleio_sequence   (void** seq)         {reset(); _pleio_sequence = (unsigned char**)seq;};
-//  void    set_mutcor_sequence  (void** seq);
-    inline virtual trait_t get_type      ( )  const              {return _type;}
+  inline virtual trait_t get_type      ( )  const              {return _type;}
   virtual void    set_value            ( )                     { }
   virtual void*   getValue             ( )	const              {return 0;}
   virtual void    inherit              (TTrait* mother, TTrait* father);
@@ -199,8 +192,6 @@ public:
 
   void    inherit_low                  (sex_t SEX, unsigned char* seq, unsigned char** parent);
   void    inherit_free                 (sex_t SEX, unsigned char* seq, unsigned char** parent);
-//  void    inherit_low                  (sex_t SEX, unsigned char* seq, unsigned char* pleio_seq, unsigned char** parent, unsigned char** pleio_parent);
-//  void    inherit_free                 (sex_t SEX, unsigned char* seq, unsigned char* pleio_seq, unsigned char** parent, unsigned char** pleio_parent);
 
   //implementation of TraitPrototype:
   virtual void                     init  (){}
@@ -256,10 +247,12 @@ public:
   virtual void FHread (string& filename);
 
   void write_TAB();
+  void write_PLINK ();
+  void write_PLINK_BED (ofstream &BED);
   void write_GENEPOP();
   void write_FSTAT();
   void write_Fst_i();
-  void write_freq();
+//  void write_freq();
   void write_varcompWC();
   
   void setOutputOption(string opt);
