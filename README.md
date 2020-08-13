@@ -1,5 +1,5 @@
 ## nemo_evolving_pleio
-individual-based, genetically explicit, forward-in-time, stochastic, population modelling that allows for evolving pleiotropic connections between alleles and traits as well as evolving correlational mutations on those traits (based on Guillaume and Rougement 2006) 
+individual-based, genetically explicit, forward-in-time, stochastic, population modelling software that allows for evolving pleiotropic connections between alleles and traits as well as evolving correlational mutations on those traits (based on Guillaume and Rougement 2006) 
 
 #see home page and nemo2 manual for instructions on use. http://nemo2.sourceforge.net/
 
