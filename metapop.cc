@@ -43,6 +43,7 @@
 #include "lifecycleevent.h"
 #include "simulation.h"
 #include "simenv.h"
+#include "binarystoragebuffer.cc"
 
 using namespace std;
 
@@ -450,7 +451,7 @@ void Metapop::store_data ( BinaryStorageBuffer* saver )
   //males adults
   saver->store(sizes[2], _patchNbr * sizeof(unsigned int));
   
-  int byte_count = saver->getByteLength();
+  int byte_count = saver->getTotByteRecorded();
   //record all individual informations: IDs, matings, etc.
   for(unsigned int i = 0; i < _patchNbr; ++i) {
     //first offspring:
@@ -470,7 +471,7 @@ void Metapop::store_data ( BinaryStorageBuffer* saver )
   
 #ifdef _DEBUG_
   message("Metapop::store_data :stored %ikB of individual data (%i individuals)\n",
-          (saver->getByteLength()-byte_count)/1024, size());
+          (saver->getTotByteRecorded()-byte_count)/1024, size());
 #endif
   
   //records the trait sequences:
@@ -479,7 +480,7 @@ void Metapop::store_data ( BinaryStorageBuffer* saver )
   //  trait_t type;
   separator[1] = 'T'; //trait separator = '@T'
   
-  byte_count = saver->getByteLength();
+  byte_count = saver->getTotByteRecorded();
   
   while(tt != traits.end()) {
     saver->store(&separator, 2 * sizeof(unsigned char));
@@ -495,7 +496,7 @@ void Metapop::store_data ( BinaryStorageBuffer* saver )
   }
 #ifdef _DEBUG_
   message("Metapop::store_data :stored %ikB of traits data\n",
-          (saver->getByteLength()-byte_count)/1024);
+          (saver->getTotByteRecorded()-byte_count)/1024);
 #endif
   
   for(unsigned int i = 0; i < 3; i++)

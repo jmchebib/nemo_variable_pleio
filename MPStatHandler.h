@@ -35,7 +35,7 @@
 
 class Individual;
 class Metapop;
-/**@todo Add pedigree stats*/
+
 /**A StatHandler for the Metapop SimComponent.*/
 class MPStatHandler : public StatHandler<MPStatHandler> {
 
