@@ -30,6 +30,11 @@ mkdir bin
 
 mv src/Makefile ./
 
+# Step 4b
+#move this README.md outside of src/ if it is in there
+
+mv src/README.md ./
+
 # Step 5
 #make nemo program file in bin directory by using 'make' command outside of bin/ and src/ directories
 
